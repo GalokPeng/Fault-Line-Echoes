@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <meta name="theme-color" content="#182621" />
+    <title>断层回声 · 四境世界志</title>
+    <link rel="icon" href="/sigil.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <main id="stage" aria-label="断层回声三维世界">
+      <div id="backdrop"></div>
+      <canvas id="world" tabindex="0" aria-label="第一人称世界"></canvas>
+    </main>
+    <div id="atlas">
+      <div class="shade"></div>
+      <header class="mast">
+        <div class="brand">
+          <img src="/sigil.svg" alt="" /><span>断层回声<small>FAULT LINE ECHOES</small></span>
+        </div>
+        <div class="tools">
+          <button id="atlasMode" class="nav active">世界志</button
+          ><button id="roleButton" class="nav">行者</button
+          ><button id="roomButton" class="nav">联机</button
+          ><button class="icon" id="options" aria-label="设置" title="设置">☼</button>
+        </div>
+      </header>
+      <section class="place">
+        <div class="folio"><i></i> 盆地勘察手记 <span>/</span> FIELD ATLAS</div>
+        <div class="chapter" id="chapter"></div>
+        <h1 id="worldTitle"></h1>
+        <p class="english" id="worldEnglish"></p>
+        <p class="desc" id="worldDesc"></p>
+        <div class="meta">
+          <span>主城</span><strong id="cityTitle"></strong><b>·</b><span>野外</span
+          ><strong id="wildTitle"></strong>
+        </div>
+        <div class="enterrow">
+          <button class="primary" id="enter">进入世界 <span>⟶</span></button
+          ><button class="quiet" id="survey"><span class="round">⌖</span> 自由预览</button>
+        </div>
+      </section>
+      <div class="atlasBottom">
+        <div class="shelfHead"><span>选择世界</span><em></em><small>THE FOUR REGIONS</small></div>
+        <nav id="regions" aria-label="四个可进入的世界"></nav>
+      </div>
+      <div class="edgeInfo" id="edgeInfo"></div>
+    </div>
+    <div id="surveyHud" hidden>
+      <button id="endSurvey" class="glass">← 世界志</button><span>拖动环视 · 滚轮调整距离</span
+      ><button id="surveyEnter" class="primary">进入世界 ⟶</button>
+    </div>
+    <div id="hud" hidden>
+      <div class="compass">
+        <small id="direction"></small><strong id="heading"></strong><small id="direction2"></small>
+      </div>
+      <div class="hudPlace">
+        <small id="weather"></small><strong id="area"></strong><span id="clock"></span>
+      </div>
+      <div class="track" id="tracker"></div>
+      <div id="reticle"></div>
+      <div class="vitals">
+        <small id="roleName"></small>
+        <div class="health"><i id="hpBar"></i></div>
+        <div class="energy"><i id="stBar"></i></div>
+        <span id="hpText"></span>
+      </div>
+      <div id="hotbar"></div>
+      <div class="hudMenu">
+        <button id="logButton">T　手记</button><button id="pauseButton">Esc　菜单</button>
+      </div>
+      <div id="prompt"></div>
+      <div id="feedback"></div>
+      <div id="hitflash"></div>
+      <div id="touchpad" aria-label="拖动移动"><i></i></div>
+      <div id="touchActions">
+        <button data-action="light">掌</button><button data-action="heavy">重</button
+        ><button data-key="KeyF">挡</button><button data-key="Space">跃</button
+        ><button data-action="interact">交互</button><button data-action="pause">菜单</button>
+      </div>
+    </div>
+    <div id="loading" role="status" hidden><i></i><span>正在踏勘地形…</span></div>
+    <div id="dialog" hidden>
+      <section role="dialog" aria-modal="true" aria-labelledby="dialogTitle">
+        <div class="dialogTop">
+          <small>FAULT LINE ECHOES</small><button id="dismiss" class="icon" aria-label="关闭">×</button>
+        </div>
+        <h2 id="dialogTitle"></h2>
+        <div id="dialogBody"></div>
+      </section>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

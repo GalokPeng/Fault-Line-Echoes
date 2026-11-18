@@ -1,0 +1,10 @@
+.git
+.vercel
+.env
+.env.*
+node_modules
+dist
+faultline-echo.html
+faultline-arena.html
+faultline-web3d.html
+faultline-game

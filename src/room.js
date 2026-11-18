@@ -22,7 +22,7 @@ export async function connectRoom(invite, onStatus, onOpen, onClose) {
   const close = () => {
     if (active) wire.close()
   }
-  async function api(op, fields) {
+  async function api(op, fields, retries = op === 'create' ? 0 : 4) {
     const response = await fetch('/api/rooms', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -32,6 +32,11 @@ export async function connectRoom(invite, onStatus, onOpen, onClose) {
     if (!response.headers.get('content-type')?.includes('json'))
       throw Error('当前静态站点可使用手动直连')
     const data = await response.json()
+    // A freshly written invitation can take a moment to become visible to another invocation.
+    if (active && retries > 0 && [404, 502, 503, 504].includes(response.status)) {
+      await new Promise((resolve) => setTimeout(resolve, 700 + (4 - retries) * 300))
+      return api(op, fields, retries - 1)
+    }
     if (!response.ok) throw Error(data.error || '房间服务暂时不可用')
     return data
   }

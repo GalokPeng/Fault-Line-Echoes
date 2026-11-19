@@ -140,6 +140,15 @@ skill 随附复现脚本和源码索引。agent 可以从本地 Git 仓库或 Gi
 
 原创代码、程序美术和 skill 采用 MIT。构建会生成 `dist/licenses/third-party.md`，单 HTML 游戏也内嵌第三方声明。[项目许可证](LICENSE) · [地表素材明细](public/terrain-materials/CREDITS.md) · [天空素材明细](public/sky/CREDITS.md) · [Three.js](https://threejs.org/) · [Rapier](https://rapier.rs/) · [Vite](https://vite.dev/)
 
+## Star 趋势
+
+<a href="https://www.star-history.com/?repos=GalokPeng%2FFault-Line-Echoes&amp;type=date&amp;legend=top-left">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=GalokPeng/Fault-Line-Echoes&amp;type=date&amp;legend=top-left&amp;theme=dark" />
+    <img alt="Fault Line Echoes 的 GitHub Star 数量随时间的变化" src="https://api.star-history.com/chart?repos=GalokPeng/Fault-Line-Echoes&amp;type=date&amp;legend=top-left" />
+  </picture>
+</a>
+
 ## 交流友链
 
 [https://linux.do](https://linux.do)

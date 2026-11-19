@@ -138,6 +138,15 @@ Use Node.js 22.12+ and npm. `npm ci` installs the locked dependencies. `npm run 
 
 Original code, programmatic art and skill are distributed under MIT. Production builds include dependency notices in `dist/licenses/third-party.md`; the single HTML embeds the notices. [Project license](LICENSE) · [Terrain credits](public/terrain-materials/CREDITS.md) · [Sky credits](public/sky/CREDITS.md) · [Three.js](https://threejs.org/) · [Rapier](https://rapier.rs/) · [Vite](https://vite.dev/)
 
+## Star History
+
+<a href="https://www.star-history.com/?repos=GalokPeng%2FFault-Line-Echoes&amp;type=date&amp;legend=top-left">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=GalokPeng/Fault-Line-Echoes&amp;type=date&amp;legend=top-left&amp;theme=dark" />
+    <img alt="GitHub stars for Fault Line Echoes over time" src="https://api.star-history.com/chart?repos=GalokPeng/Fault-Line-Echoes&amp;type=date&amp;legend=top-left" />
+  </picture>
+</a>
+
 ## Community
 
 [https://linux.do](https://linux.do)

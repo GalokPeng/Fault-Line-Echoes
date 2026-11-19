@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { assetUrl } from './asset-url.js'
 import { clamp, mix } from './biomes.js'
 
 export function random(seed) {
@@ -178,7 +179,7 @@ export function plantMaterials() {
 export function photoSet(name) {
   const loader = new THREE.TextureLoader()
   const make = (kind) => {
-    const t = loader.load('/terrain-materials/' + name + '-' + kind + '.webp')
+    const t = loader.load(assetUrl('/terrain-materials/' + name + '-' + kind + '.webp'))
     t.wrapS = t.wrapT = THREE.RepeatWrapping
     t.anisotropy = 4
     if (kind === 'albedo') t.colorSpace = THREE.SRGBColorSpace

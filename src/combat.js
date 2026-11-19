@@ -33,6 +33,7 @@ export const roles = {
   },
 }
 // Distance in metres, time in seconds. A cast never writes the camera orientation.
+export const tideWave = { shot: 30, dmg: 24, spread: 0.055, flight: 18 }
 const kits = {
   leaf: [
     { dash: 12, dist: 3.5, dmg: 12 },
@@ -48,7 +49,7 @@ const kits = {
   ],
   tide: [
     { shot: 38, dmg: 21 },
-    { shot: 30, dmg: 24, spread: 0.055 },
+    tideWave,
     { dash: -12, shot: 15, dmg: 13 },
     { shot: 42, dmg: 19, burst: 3 },
   ],
@@ -77,6 +78,8 @@ export function fighter(role = 'leaf') {
     dashSpeed: 0,
     boost: 0,
     stun: 0,
+    attackBonus: 0,
+    armor: 0,
   }
 }
 export function recover(f, dt) {
@@ -114,10 +117,12 @@ export function cast(f, key) {
     f.dashSpeed = spec.dash
     f.boost = 0.75
   }
+  spec.dmg += Math.max(0, Number(f.attackBonus) || 0)
   f.guard = false
   return spec
 }
 export function hurt(target, amount, frontal = true) {
+  amount *= 1 - Math.max(0, Math.min(65, Number(target.armor) || 0)) / 100
   if (frontal && (target.guard || target.parry > 0) && target.stamina >= 8) {
     target.stamina -= target.role === 'stone' ? 4 : 9
     target.charge = Math.min(100, target.charge + 7)

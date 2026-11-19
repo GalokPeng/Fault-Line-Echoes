@@ -6,7 +6,7 @@ import { fresh, completeStep, current, main, side } from '../src/journal.js'
 
 test('all four independent terrains give navigable paths from capital to landmark', () => {
   const fingerprints = new Set()
-  for (const b of Object.values(biomes)) {
+  for (const b of Object.values(biomes).filter((b) => b.id !== 'capital')) {
     const heights = gridData(b.id)
     assert.ok(Math.max(...heights) - Math.min(...heights) > 65)
     fingerprints.add(heights.slice(3200, 3220).join())

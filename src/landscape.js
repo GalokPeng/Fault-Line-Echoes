@@ -1,4 +1,6 @@
 import * as THREE from 'three'
+import { onBorderRoad } from './borders.js'
+import { createCapitalLandscape } from './capital-landscape.js'
 import {
   biomes,
   gridDivisions,
@@ -375,7 +377,10 @@ function adornments(id, group, solids) {
   const [wildX, wildZ] = b.landmark
   const terrainY = (x, z) => heightAt(id, x, z)
   const open = (x, z) =>
-    Math.hypot(x, z) > 58 && trailDistance(id, x, z) > 4.8 && Math.hypot(x - wildX, z - wildZ) > 9
+    Math.hypot(x, z) > 58 &&
+    trailDistance(id, x, z) > 4.8 &&
+    Math.hypot(x - wildX, z - wildZ) > 9 &&
+    !onBorderRoad(id, x, z)
   function tree(x, z, index, s, a = rng() * 6.28) {
     if (s <= 0) return
     const key = index + '|' + Math.floor(x / 150) + '|' + Math.floor(z / 150)
@@ -401,6 +406,8 @@ function adornments(id, group, solids) {
                 : 0.75
     if (type !== 'fern') {
       solids.push({
+        kind: 'tree',
+        grip: type === 'palm' ? 3.7 : type === 'old' ? 1.35 : 1.6,
         x,
         z,
         y: y - 0.08,
@@ -919,6 +926,7 @@ function drift(id, group) {
   return pts
 }
 export function createLandscape(scene, id) {
+  if (id === 'capital') return createCapitalLandscape(scene)
   const group = new THREE.Group()
   group.name = id + '-landscape'
   scene.add(group)

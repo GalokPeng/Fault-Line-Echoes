@@ -6,7 +6,7 @@ export function soundscape() {
     filter,
     enabled = true,
     region = 'rain',
-    stepTime = 0,
+    footNoise,
     birdTime = 0
   function wake() {
     try {
@@ -24,6 +24,9 @@ export function soundscape() {
         }
         wind = ctx.createBufferSource()
         wind.buffer = noise
+        footNoise = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.22), ctx.sampleRate)
+        const samples = footNoise.getChannelData(0)
+        for (let i = 0; i < samples.length; i++) samples[i] = Math.random() * 2 - 1
         wind.loop = true
         filter = ctx.createBiquadFilter()
         filter.type = 'lowpass'
@@ -65,6 +68,35 @@ export function soundscape() {
     setRegion(id) {
       region = id
     },
+    foot(event) {
+      if (!ctx || !enabled || !event) return
+      const profiles = {
+        stone: [166, 490, 0.07],
+        wood: [115, 810, 0.12],
+        leaves: [83, 2400, 0.14],
+        water: [94, 1800, 0.19],
+        sand: [72, 1080, 0.13],
+      }
+      const [root, cut, life] = profiles[event.surface] || profiles.leaves
+      note(root, root * 0.37, life, event.volume, 'triangle')
+      const s = ctx.createBufferSource(),
+        filter = ctx.createBiquadFilter(),
+        g = ctx.createGain()
+      s.buffer = footNoise
+      filter.type = 'bandpass'
+      filter.frequency.value = cut
+      filter.Q.value = 0.7
+      g.gain.setValueAtTime(event.volume * 0.6, ctx.currentTime)
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + life)
+      s.connect(filter).connect(g).connect(master)
+      s.start()
+      s.stop(ctx.currentTime + life)
+      s.onended = () => {
+        s.disconnect()
+        filter.disconnect()
+        g.disconnect()
+      }
+    },
     tick(dt, moving, sprint, inside, day, quiet) {
       if (!ctx || !enabled) return
       filter.frequency.setTargetAtTime(
@@ -73,12 +105,7 @@ export function soundscape() {
         0.8,
       )
       windGain.gain.setTargetAtTime(inside ? 0.065 : 0.18, ctx.currentTime, 0.8)
-      stepTime -= dt
       birdTime -= dt
-      if (moving && stepTime < 0) {
-        stepTime = sprint ? 0.32 : 0.48
-        note(inside ? 155 : region === 'salt' ? 105 : 115, 34, 0.09, quiet ? 0.038 : 0.15, 'triangle')
-      }
       if (!inside && birdTime < 0) {
         birdTime = 3 + Math.random() * 6
         const forest = region === 'rain' || region === 'root'

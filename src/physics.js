@@ -35,7 +35,7 @@ export async function makePhysics(ground, cylinders, boxes, spawn, radius) {
         .setRotation({ x: 0, y: Math.sin(yaw / 2), z: 0, w: Math.cos(yaw / 2) }),
     )
   }
-  const center = 0.89
+  let center = 0.89
   const body = world.createRigidBody(
     R.RigidBodyDesc.kinematicPositionBased().setTranslation(spawn.x, spawn.y + center + 0.07, spawn.z),
   )
@@ -57,7 +57,7 @@ export async function makePhysics(ground, cylinders, boxes, spawn, radius) {
       vy = 6.6
       grounded = false
     }
-    vy = climb ? 4.6 : Math.max(-38, vy - 17 * dt)
+    vy = typeof climb === 'number' ? climb : climb ? 1.7 : Math.max(-38, vy - 17 * dt)
     if (waterLevel !== null && p.y < waterLevel + 0.38) {
       const target = waterLevel + 0.06 + (jump ? 0.44 : 0)
       vy = Math.min(3.8, Math.max(-2.2, (target - p.y) * 4))
@@ -95,6 +95,29 @@ export async function makePhysics(ground, cylinders, boxes, spawn, radius) {
     move,
     feet,
     clear,
+    crouch(wanted) {
+      const next = wanted ? 0.58 : 0.89
+      if (next === center) return center < 0.7
+      const foot = feet(),
+        pos = { x: foot.x, y: foot.y + next + 0.006, z: foot.z }
+      if (
+        !wanted &&
+        world.intersectionWithShape(
+          pos,
+          { x: 0, y: 0, z: 0, w: 1 },
+          new R.Capsule(0.54, 0.33),
+          undefined,
+          undefined,
+          capsule,
+        )
+      )
+        return true
+      capsule.setHalfHeight(next - 0.34)
+      center = next
+      body.setTranslation(pos, true)
+      body.setNextKinematicTranslation(pos)
+      return wanted
+    },
     get grounded() {
       return grounded
     },

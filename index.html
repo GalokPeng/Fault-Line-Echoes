@@ -37,19 +37,19 @@
           ><strong id="wildTitle"></strong>
         </div>
         <div class="enterrow">
-          <button class="primary" id="enter">进入世界 <span>⟶</span></button
+          <button class="primary" id="enter">进入世界 · 白砥城</button
           ><button class="quiet" id="survey"><span class="round">⌖</span> 自由预览</button>
         </div>
       </section>
       <div class="atlasBottom">
-        <div class="shelfHead"><span>选择世界</span><em></em><small>THE FOUR REGIONS</small></div>
-        <nav id="regions" aria-label="四个可进入的世界"></nav>
+        <div class="shelfHead"><span>实景预览</span><em></em><small>CAPITAL & FOUR REGIONS</small></div>
+        <nav id="regions" aria-label="主城与四境预览"></nav>
       </div>
       <div class="edgeInfo" id="edgeInfo"></div>
     </div>
     <div id="surveyHud" hidden>
       <button id="endSurvey" class="glass">← 世界志</button><span>拖动环视 · 滚轮调整距离</span
-      ><button id="surveyEnter" class="primary">进入世界 ⟶</button>
+      ><button id="surveyEnter" class="primary">从白砥城出发</button>
     </div>
     <div id="hud" hidden>
       <div class="compass">
@@ -65,19 +65,24 @@
         <div class="health"><i id="hpBar"></i></div>
         <div class="energy"><i id="stBar"></i></div>
         <span id="hpText"></span>
+        <div id="survival"></div>
       </div>
       <div id="hotbar"></div>
       <div class="hudMenu">
-        <button id="logButton">T　手记</button><button id="pauseButton">Esc　菜单</button>
+        <button id="mapButton">Tab　地图</button><button id="packButton">B　行囊</button
+        ><button id="logButton">T　手记</button><button id="pauseButton">Esc　菜单</button>
       </div>
       <div id="prompt"></div>
       <div id="feedback"></div>
+      <div id="caption" aria-live="polite"></div>
       <div id="hitflash"></div>
       <div id="touchpad" aria-label="拖动移动"><i></i></div>
       <div id="touchActions">
         <button data-action="light">掌</button><button data-action="heavy">重</button
         ><button data-key="KeyF">挡</button><button data-key="Space">跃</button
-        ><button data-action="interact">交互</button><button data-action="pause">菜单</button>
+        ><button data-action="interact">交互</button><button data-action="pause">菜单</button
+        ><button data-action="quiet">静步</button><button data-action="crouch">蹲姿</button
+        ><button data-key="ShiftLeft">疾跑</button>
       </div>
     </div>
     <div id="loading" role="status" hidden><i></i><span>正在踏勘地形…</span></div>

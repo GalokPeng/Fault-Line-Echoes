@@ -6,7 +6,28 @@ const material = new THREE.MeshStandardMaterial({
   roughness: 0.88,
   side: THREE.DoubleSide,
 })
+const animalMaterial = material.clone()
+animalMaterial.onBeforeCompile = (shader) => {
+  shader.vertexShader =
+    'varying vec3 hidePosition;\n' +
+    shader.vertexShader.replace(
+      '#include <begin_vertex>',
+      '#include <begin_vertex>\nhidePosition=position;',
+    )
+  shader.fragmentShader =
+    'varying vec3 hidePosition;\n' +
+    shader.fragmentShader.replace(
+      '#include <color_fragment>',
+      `
+    #include <color_fragment>
+    vec3 p=hidePosition;
+    float mottle=sin(p.z*18.+sin(p.y*19.+p.x*11.)*1.3)*sin(p.x*21.-p.y*12.);
+    float grain=sin(p.y*97.+p.z*56.+sin(p.x*86.));
+    diffuseColor.rgb*=.94+.11*mottle+.025*grain;`,
+    )
+}
 const palettes = {
+  capital: ['#516b79', '#d4ad6f', '#3a4148'],
   rain: ['#5a8274', '#e2af6f', '#3b5149'],
   salt: ['#cd9a61', '#406f78', '#5e4b42'],
   root: ['#67546a', '#9dbe76', '#3e463d'],
@@ -40,7 +61,8 @@ function buildPart(parent, origin, draw) {
   const group = new THREE.Group()
   group.position.set(...origin)
   parent.add(group)
-  const batch = new Batch(group, { body: material })
+  group.userData.animal = !!parent.userData.animal
+  const batch = new Batch(group, { body: group.userData.animal ? animalMaterial : material })
   const p = {
     ball: (c, x, y, z, a, b, d, rot = [0, 0, 0]) =>
       batch.add('body', shape.ball(), c, x, y, z, a, b, d, rot),
@@ -127,26 +149,30 @@ function person(group, kind, id, color) {
       }),
     )
   }
-  return (phase, walk, strike, t) => {
+  return (phase, walk, strike, t, tell = 0) => {
     torso.position.y = 0.83 + Math.abs(Math.sin(phase)) * 0.034 * walk + Math.sin(t * 2) * 0.006
     torso.rotation.y = Math.sin(phase) * 0.055 * walk + Math.sin(strike * Math.PI) * 0.16
+    torso.rotation.x = -tell * 0.14
     head.rotation.y = Math.sin(t * 0.79) * 0.11 * (1 - walk)
     legs.forEach((limb, i) => (limb.rotation.x = Math.sin(phase + i * Math.PI) * 0.59 * walk))
     arms.forEach((limb, i) => {
       limb.rotation.x =
         -Math.sin(phase + i * Math.PI) * 0.45 * walk -
-        (i === 1 ? 1.5 : 0.71) * Math.sin(Math.PI * strike)
+        (i === 1 ? 1.5 : 0.71) * Math.sin(Math.PI * strike) -
+        tell * (i ? 1.05 : 0.48)
     })
   }
 }
-function creature(group, id) {
-  const salt = id === 'salt',
-    root = id === 'root',
-    gorge = id === 'gorge'
-  const main = salt ? '#977542' : root ? '#635446' : gorge ? '#8a7160' : '#496759'
+function creature(group, id, species = {}) {
+  const form = species.form || { rain: 'drake', salt: 'scorpion', root: 'boar', gorge: 'bird' }[id]
+  const salt = form === 'scorpion',
+    root = ['boar', 'hart', 'ram', 'ox'].includes(form),
+    gorge = form === 'bird',
+    boss = species.boss
+  const main = species.color || (salt ? '#977542' : root ? '#635446' : gorge ? '#8a7160' : '#496759')
   const under = salt ? '#c7a15b' : root ? '#927960' : gorge ? '#b88053' : '#91a583'
   const accent = salt ? '#695d47' : root ? '#b5b989' : gorge ? '#a14d38' : '#4c9e91'
-  const base = salt ? 0.56 : root ? 1.01 : gorge ? 1.37 : 0.77
+  const base = salt ? 0.56 : form === 'hart' ? 1.24 : root ? 1.01 : gorge ? 1.37 : 0.77
   const torso = buildPart(group, [0, base, 0], (p) => {
     p.ball(
       main,
@@ -175,6 +201,40 @@ function creature(group, id) {
         p.cone(under, s * 0.91, -0.065, 1.31, 0.092, 0.35, 0.09, 0, 1, 8, [1.32, s * 0.15, 0])
         p.cone(under, s * 1.05, -0.062, 1.3, 0.071, 0.3, 0.07, 0, 1, 8, [1.25, -s * 0.2, 0])
       }
+    } else if (form === 'hart') {
+      p.ball(main, 0, 0.15, 0.3, 0.42, 0.43, 0.54)
+      p.rod(main, [0, 0.18, 0.36], [0, 0.66, 0.82], 0.22)
+      p.ball(under, 0, 0.32, 0.57, 0.22, 0.34, 0.16, [0.4, 0, 0])
+      for (const s of [-1, 1])
+        for (let j = 0; j < 5; j++) {
+          p.ball(
+            '#b9ae83',
+            s * (0.5 - 0.04 * Math.cos(j * 1.27)),
+            0.2 + 0.045 * Math.sin(j * 2),
+            -0.49 + j * 0.18,
+            0.052,
+            0.051,
+            0.065,
+          )
+        }
+    } else if (form === 'ox') {
+      p.ball(main, 0, 0.13, 0.18, 0.65, 0.61, 0.79)
+      p.ball('#4a4039', 0, 0.34, 0.39, 0.55, 0.48, 0.5)
+      p.ball(under, 0, -0.14, 0.65, 0.27, 0.41, 0.24)
+    } else if (form === 'ram') {
+      p.ball(under, 0, 0.19, 0.32, 0.52, 0.49, 0.58)
+      for (const s of [-1, 1])
+        for (let j = 0; j < 5; j++) {
+          p.ball(
+            j % 2 ? main : under,
+            s * 0.43,
+            0.17 + 0.04 * Math.sin(j),
+            -0.47 + j * 0.21,
+            0.16,
+            0.18,
+            0.2,
+          )
+        }
     } else if (root) {
       p.ball(main, 0, 0.12, 0.39, 0.6, 0.63, 0.57)
       for (const s of [-1, 1])
@@ -210,21 +270,173 @@ function creature(group, id) {
       for (const s of [-1, 1])
         for (let i = 0; i < 4; i++) p.ball(under, s * 0.375, 0.016, -0.48 + i * 0.2, 0.03, 0.068, 0.046)
     }
+    if (boss) {
+      for (let j = 0; j < 7; j++) {
+        const z = -0.68 + j * 0.19,
+          w = 0.22 + 0.14 * Math.sin((j * Math.PI) / 6)
+        if (salt) {
+          for (const s of [-1, 1])
+            p.cone(
+              j % 2 ? '#e5b863' : '#d6d4ad',
+              s * (0.33 + 0.13 * Math.sin(j * 0.53)),
+              0.37,
+              z,
+              0.11,
+              w + 0.14,
+              0.11,
+              0.05,
+              1,
+              5,
+              [s * 0.11, 0, -s * 0.47],
+            )
+        } else if (!root && !gorge) {
+          p.ball(j % 2 ? '#e6bd71' : '#5fc2b8', 0, 0.46, z, 0.048, w + 0.18, 0.17, [-0.29, 0, 0])
+          for (const s of [-1, 1])
+            p.cone('#bfa960', s * 0.37, 0.17, z, 0.067, 0.24, 0.06, 0, 1, 6, [0, 0, -s * 0.9])
+        }
+      }
+    }
   })
-  const head = buildPart(torso, [0, gorge ? 0.49 : root ? 0.14 : 0.035, gorge ? 0.82 : 0.67], (p) => {
-    p.ball(main, 0, 0, 0.15, salt ? 0.33 : root ? 0.39 : 0.27, salt ? 0.17 : 0.3, 0.39)
-    p.ball(under, 0, -0.092, 0.39, root ? 0.265 : 0.21, 0.144, 0.205)
+  const headHeight = form === 'hart' ? 0.64 : gorge ? 0.49 : form === 'ram' ? 0.3 : root ? 0.14 : 0.035
+  const head = buildPart(torso, [0, headHeight, gorge || form === 'hart' ? 0.82 : 0.67], (p) => {
+    p.ball(
+      main,
+      0,
+      0,
+      0.15,
+      salt ? 0.33 : form === 'hart' ? 0.26 : root ? 0.39 : 0.27,
+      salt ? 0.17 : 0.3,
+      0.39,
+    )
+    p.ball(under, 0, -0.092, 0.39, form === 'hart' ? 0.17 : root ? 0.265 : 0.21, 0.144, 0.205)
+    if (form === 'hart' || form === 'ram' || form === 'ox')
+      p.ball('#443c32', 0, -0.093, 0.57, form === 'hart' ? 0.12 : 0.15, 0.061, 0.055)
     for (const s of [-1, 1]) {
+      // Forward-facing lids keep the creature's gaze legible from the combat camera.
+      const eyeX = s * (root ? 0.205 : salt ? 0.18 : 0.16),
+        eyeY = salt ? 0.11 : 0.135,
+        eyeZ = salt ? 0.44 : 0.416
+      p.ball('#2e3029', eyeX, eyeY, eyeZ, 0.074, 0.064, 0.055, [0, s * 0.27, -s * 0.14])
+      p.ball(boss ? '#f5c566' : '#b6a25d', eyeX, eyeY + 0.006, eyeZ + 0.041, 0.049, 0.034, 0.021)
+      p.ball('#242621', eyeX, eyeY + 0.004, eyeZ + 0.059, 0.012, 0.03, 0.01)
+      p.ball('#efe3b2', eyeX - s * 0.014, eyeY + 0.019, eyeZ + 0.063, 0.012, 0.01, 0.008)
+      p.ball(main, eyeX + s * 0.01, eyeY + 0.061, eyeZ - 0.008, 0.091, 0.023, 0.041, [
+        0,
+        s * 0.25,
+        s * 0.21,
+      ])
+      if (!gorge) p.ball('#443d30', s * 0.092, -0.068, 0.568, 0.022, 0.013, 0.027)
+      if (boss && !salt && !root && !gorge) {
+        // Layered cheek fins form a broad collar around the rain sovereign.
+        for (let j = 0; j < 4; j++) {
+          p.ball(
+            j % 2 ? '#6dafa2' : '#91baa7',
+            s * (0.32 + j * 0.047),
+            0.045 + j * 0.078,
+            -0.045 - j * 0.042,
+            0.083,
+            0.205,
+            0.075,
+            [0.25, 0, -s * (0.83 - j * 0.1)],
+          )
+          p.rod(
+            '#bda36b',
+            [s * 0.225, 0.02, -0.02],
+            [s * (0.45 + j * 0.045), 0.12 + j * 0.1, -0.11 - j * 0.039],
+            0.026,
+          )
+        }
+        p.rod('#d7c6a1', [s * 0.17, -0.065, 0.48], [s * 0.18, -0.21, 0.54], 0.047)
+        p.cone('#ede0bd', s * 0.18, -0.258, 0.55, 0.04, 0.13, 0.039, 1, 0, 8, [0.16, 0, s * 0.09])
+      }
+      if (boss && salt) {
+        p.rod(under, [s * 0.21, 0.09, 0.24], [s * 0.3, 0.25, 0.38], 0.042)
+        p.ball('#3a392d', s * 0.3, 0.25, 0.38, 0.054, 0.051, 0.058)
+        p.ball('#ddbd79', s * 0.3, 0.26, 0.425, 0.029, 0.025, 0.016)
+      }
       p.ball('#312e26', s * (root ? 0.32 : 0.216), 0.065, 0.29, 0.06, 0.067, 0.071)
       p.ball('#eaca79', s * (root ? 0.35 : 0.24), 0.08, 0.315, 0.024, 0.039, 0.036)
-      if (root) {
+      if (form === 'ox') {
+        p.rod('#b6ab92', [s * 0.23, 0.2, 0.08], [s * 0.54, 0.27, -0.04], 0.092)
+        p.rod('#c2b59a', [s * 0.54, 0.27, -0.04], [s * 0.75, 0.5, -0.14], 0.066)
+        p.rod('#484137', [s * 0.75, 0.5, -0.14], [s * 0.79, 0.62, -0.12], 0.037)
+        p.ball(main, s * 0.42, 0.05, 0.04, 0.22, 0.1, 0.12, [0, s * 0.22, -s * 0.32])
+        p.ball('#353330', s * 0.083, -0.098, 0.59, 0.029, 0.021, 0.025)
+      } else if (form === 'hart' || form === 'ram') {
+        const horn = form === 'hart' ? '#bdac80' : '#d9c8a5'
+        const pts =
+          form === 'hart'
+            ? [
+                [0.18, 0.17, 0.08],
+                [0.31, 0.4, 0.02],
+                [0.47, 0.65, -0.17],
+                [0.65, 0.83, -0.22],
+              ]
+            : [
+                [0.19, 0.16, 0.02],
+                [0.37, 0.31, -0.12],
+                [0.49, 0.2, -0.26],
+                [0.49, 0.03, -0.22],
+                [0.4, -0.02, -0.08],
+              ]
+        for (let j = 1; j < pts.length; j++) {
+          const A = pts[j - 1],
+            B = pts[j],
+            size = boss ? 1.36 : 1
+          const a = [s * A[0] * size, A[1] * size, A[2]],
+            b = [s * B[0] * size, B[1] * size, B[2]]
+          p.rod(horn, a, b, (form === 'ram' ? 0.123 : 0.076) * (1 - j / (pts.length + 1)))
+          if (form === 'hart' && j > 1)
+            p.rod(
+              boss ? '#b2d59b' : horn,
+              a,
+              [s * (A[0] * size + 0.04), A[1] * size + 0.22, A[2] + 0.15],
+              0.043,
+            )
+        }
+        p.ball(under, s * 0.29, 0.15, 0.04, 0.11, 0.12, 0.06, [0, 0, -s * 0.61])
+      } else if (form === 'fox') {
+        p.cone(under, s * 0.18, 0.21, 0.04, 0.14, 0.41, 0.11, 0, 1, 6, [-0.18, 0, -s * 0.2])
+        p.cone('#785745', s * 0.18, 0.22, 0.09, 0.081, 0.25, 0.05, 0, 1, 6, [-0.18, 0, -s * 0.2])
+      } else if (root) {
         p.cone('#dac49b', s * 0.25, -0.01, 0.46, 0.065, 0.35, 0.064, 0, 1, 8, [0.29, 0, -s * 0.42])
         p.ball(under, s * 0.3, 0.19, -0.01, 0.142, 0.19, 0.058, [0, 0, -s * 0.62])
       } else if (!salt) {
         p.cone(accent, s * 0.22, 0.255, 0.005, 0.09, 0.38, 0.11, 0, 1, 6, [-0.52, 0, -s * 0.56])
       }
     }
-    if (gorge) p.cone('#54443b', 0, -0.05, 0.53, 0.136, 0.36, 0.12, 0, 1, 8, [1.63, 0, 0])
+    if (gorge) {
+      p.cone('#6a513c', 0, -0.045, 0.56, 0.143, 0.42, 0.13, 0, 1, 8, [1.69, 0, 0])
+      p.cone('#453b31', 0, -0.115, 0.71, 0.061, 0.15, 0.058, 0, 1, 8, [2.1, 0, 0])
+    }
+    if (species.id === 'kingfisher')
+      for (let j = -1; j <= 1; j++) {
+        p.ball(j ? '#55a6a1' : '#cd994e', j * 0.063, 0.29, -0.03, 0.044, 0.26, 0.06, [
+          -0.64,
+          0,
+          -j * 0.22,
+        ])
+      }
+    if (species.id === 'duskOwl')
+      for (const s of [-1, 1]) {
+        p.ball('#aa9b83', s * 0.135, 0.088, 0.412, 0.138, 0.132, 0.055, [0, s * 0.2, 0])
+        p.ball('#302e2c', s * 0.145, 0.105, 0.463, 0.087, 0.082, 0.035)
+        p.ball('#dcad5c', s * 0.145, 0.11, 0.488, 0.052, 0.055, 0.018)
+        p.ball('#282a29', s * 0.145, 0.112, 0.501, 0.029, 0.044, 0.013)
+      }
+    if (boss && gorge)
+      for (let j = -2; j <= 2; j++) {
+        p.ball(
+          j % 2 ? '#ce8a4b' : '#dbb476',
+          j * 0.072,
+          0.39 - Math.abs(j) * 0.03,
+          -0.12,
+          0.057,
+          0.37,
+          0.065,
+          [-0.58, 0, -j * 0.14],
+        )
+      }
   })
   const tail = buildPart(torso, [0, 0.03, -0.68], (p) => {
     if (salt) {
@@ -241,9 +453,15 @@ function creature(group, id) {
         p.ball(main, ...pts[i], 0.115, 0.12, 0.125)
       }
       p.cone(accent, 0, 1.1, -0.07, 0.059, 0.33, 0.07, 0, 1, 8, [2.5, 0, 0])
+    } else if (form === 'ox') {
+      p.rod(main, [0, 0.16, 0], [0, -0.47, -0.29], 0.04)
+      p.ball('#393630', 0, -0.55, -0.29, 0.073, 0.15, 0.065)
     } else {
       p.ball(main, 0, 0.055, -0.35, root ? 0.093 : 0.167, 0.13, 0.55, [0.13, 0, 0])
-      if (!root) p.ball(accent, 0, 0.17, -0.89, 0.081, 0.08, 0.39, [0.22, 0, 0])
+      if (form === 'fox') {
+        p.ball(main, 0, 0.15, -0.69, 0.21, 0.19, 0.47, [-0.25, 0, 0])
+        p.ball('#e4d9bb', 0, 0.29, -1.03, 0.14, 0.13, 0.23, [-0.33, 0, 0])
+      } else if (!root) p.ball(accent, 0, 0.17, -0.89, 0.081, 0.08, 0.39, [0.22, 0, 0])
     }
   })
   const legs = []
@@ -264,6 +482,18 @@ function creature(group, id) {
             gorge ? 0.066 : 0.08,
           )
           p.rod(main, [s * 0.061, -base * 0.69, -0.18], [s * 0.075, -base * 0.84, 0], 0.065)
+          if (boss && gorge)
+            for (let j = 0; j < 4; j++) {
+              p.ball(
+                j % 2 ? '#bd8a59' : '#a4734c',
+                s * 0.068,
+                -base * (0.59 + j * 0.055),
+                -0.14 + j * 0.042,
+                0.072,
+                0.047,
+                0.057,
+              )
+            }
           p.ball(under, s * 0.075, -base * 0.86, 0.08, 0.115, 0.085, 0.17)
           if (gorge)
             for (let j = -1; j <= 1; j++)
@@ -278,18 +508,32 @@ function creature(group, id) {
       legs.push({ limb, beat: (idx + (s === 1 ? 1 : 0)) * Math.PI })
     }
   })
-  return (phase, walk, strike, t) => {
-    torso.position.y = base + Math.sin(t * 1.9) * 0.015 + Math.abs(Math.sin(phase)) * 0.048 * walk
-    torso.rotation.x = Math.sin(strike * Math.PI) * 0.24
+  return (phase, walk, strike, t, tell = 0, action = '') => {
+    const rear = action === 'ring' || action === 'eruption' || action === 'bolt'
+    torso.position.y =
+      base +
+      Math.sin(t * 1.9) * 0.015 +
+      Math.abs(Math.sin(phase)) * 0.048 * walk +
+      tell * (rear ? -0.015 : -0.13)
+    torso.rotation.x = Math.sin(strike * Math.PI) * 0.24 + tell * (rear ? -0.31 : 0.25)
     legs.forEach(({ limb, beat }) => {
       limb.rotation.x = Math.sin(phase + beat) * 0.47 * walk
     })
-    tail.rotation.y = Math.sin(t * (salt ? 1.55 : 2.15)) * (salt ? 0.1 : 0.23)
-    head.rotation.x = Math.sin(t * 1.87) * 0.024 + Math.sin(strike * Math.PI) * 0.2
+    tail.rotation.y =
+      Math.sin(t * (salt ? 1.55 : 2.15)) * (salt ? 0.1 : 0.23) + (action === 'sweep' ? tell * 0.86 : 0)
+    tail.rotation.x = salt ? -tell * 0.41 : 0
+    head.rotation.x =
+      Math.sin(t * 1.87) * 0.024 + Math.sin(strike * Math.PI) * 0.2 + tell * (rear ? -0.39 : 0.3)
+    if (form === 'ox' && !action)
+      head.rotation.x += (1 - walk) * (0.3 + 0.23 * Math.sin(t * 0.9 + phase))
   }
 }
 export function createActor(kind, id, color) {
   const group = new THREE.Group()
+  const beast = kind === 'beast',
+    species = beast && color && typeof color === 'object' ? color : {}
+  group.userData.animal = beast
+  if (beast) group.scale.setScalar(species.scale || 1)
   const shadow = new THREE.Mesh(
     new THREE.PlaneGeometry(kind === 'beast' ? 2.2 : 1.02, kind === 'beast' ? 3.1 : 1.15),
     shadowMaterial,
@@ -298,21 +542,42 @@ export function createActor(kind, id, color) {
   shadow.position.y = 0.038
   shadow.renderOrder = 2
   group.add(shadow)
-  const animate = kind === 'beast' ? creature(group, id) : person(group, kind, id, color)
+  const body = new THREE.Group()
+  body.userData.animal = beast
+  group.add(body)
+  const animate = beast ? creature(body, id, species) : person(body, kind, id, color)
   let phase = Math.random() * Math.PI * 2,
     weight = 0,
     elapsed = 0,
     strike = 1
   return {
     group,
-    update(dt, moving, attacking, time) {
+    fall(seconds, side = 1) {
+      const progress = THREE.MathUtils.smoothstep(seconds, 0, 0.62)
+      body.rotation.z = side * 1.36 * progress
+      body.rotation.x = -0.1 * progress
+      body.position.y = 0.4 * progress
+      shadow.position.x = -side * 0.48 * progress
+      animate(phase, 0, 1, elapsed)
+    },
+    update(dt, moving, attacking, time, windup) {
+      body.rotation.set(0, 0, 0)
+      body.position.y = 0
+      shadow.position.x = 0
       elapsed += dt
       const speed = typeof moving === 'number' ? Math.min(1, Math.abs(moving)) : moving ? 1 : 0
       weight = THREE.MathUtils.damp(weight, speed, 10, dt)
       phase += dt * (kind === 'beast' ? 8 : 9) * weight
       if (attacking && strike >= 1) strike = 0
       strike = Math.min(1, strike + dt * 3.3)
-      animate(phase, weight, strike, Number.isFinite(time) ? time : elapsed)
+      animate(
+        phase,
+        weight,
+        strike,
+        Number.isFinite(time) ? time : elapsed,
+        windup ? Math.min(1, 0.19 + windup.progress * 1.15) : 0,
+        windup?.type,
+      )
     },
     dispose: () => releaseGeometry(group),
   }

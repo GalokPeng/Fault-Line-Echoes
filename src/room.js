@@ -1,4 +1,5 @@
-import { fighter, recover, cast, hurt, rewardHit, heading, sight, roles } from './combat.js'
+import { fighter, recover, cast, hurt, rewardHit, heading, sight, roles, tideWave } from './combat.js'
+import { launchVolley, advanceFlight, flightDisplay } from './perception-flight.js'
 export async function connectRoom(invite, onStatus, onOpen, onClose) {
   const host = !invite
   let active = true,
@@ -153,7 +154,55 @@ export function match(link, hero, view, physics, onEvent) {
   const spawn = (i) => ({ x: i ? -3 : 3, y: hero.origin.y, z: 11 })
   const localIndex = link.host ? 0 : 1,
     otherIndex = 1 - localIndex
+  const waves = [],
+    display = flightDisplay(view.scene)
+  let volleyId = 0
+  function clearWaves() {
+    waves.length = 0
+    display.clear()
+  }
+  function emitWave(id, i, from, dir, spec) {
+    for (const p of launchVolley(from, dir, spec)) {
+      p.id = id
+      p.i = i
+      p.spec = spec
+      display.add(p, i !== localIndex)
+      waves.push(p)
+    }
+  }
+  function tickWaves(dt) {
+    for (let j = waves.length - 1; j >= 0; j--) {
+      const p = waves[j],
+        own = p.i === localIndex,
+        attacker = own ? hero : foe,
+        defender = own ? foe : hero
+      const center = { ...defender.pos, y: defender.pos.y + 1.12 }
+      const bodies = link.host ? [{ actor: defender, center, radius: 0.68 }] : []
+      const target = advanceFlight(p, dt, physics.clear, bodies)
+      if (target) {
+        const front = heading(own ? remoteYaw : hero.yaw),
+          v = defender.pos
+        const dmg = hurt(
+          defender.f,
+          p.spec.dmg,
+          front.x * (p.origin.x - v.x) + front.z * (p.origin.z - v.z) > 0,
+        )
+        defender.f.hp = Math.max(0, defender.f.hp - dmg)
+        rewardHit(attacker.f, p.spec, p.traveled)
+      }
+      display.sync(p)
+      if (p.done) {
+        waves.splice(j, 1)
+        if (link.host) link.send({ type: 'wave-stop', id: p.id, band: p.band })
+      }
+      if (target && !defender.f.hp) {
+        finish(p.i)
+        return
+      }
+    }
+  }
   function reset() {
+    clearWaves()
     hero.f = fighter(hero.f.role)
     if (foe) foe.f = fighter(foe.f.role)
     const p = spawn(localIndex)
@@ -166,6 +215,7 @@ export function match(link, hero, view, physics, onEvent) {
   }
   function finish(winner) {
     if (phase !== 'fight' || !link.host) return
+    clearWaves()
     if (winner >= 0) score[winner]++
     phase = score.some((v) => v >= 2) ? 'end' : 'interval'
     delay = 2.2
@@ -186,6 +236,12 @@ export function match(link, hero, view, physics, onEvent) {
     const dir = heading(own ? hero.yaw : remoteYaw, own ? hero.pitch : remotePitch),
       from = { ...attacker.pos, y: attacker.pos.y + 1.54 },
       to = { ...defender.pos, y: defender.pos.y + 1.16 }
+    if (spec.flight) {
+      const id = ++volleyId
+      emitWave(id, i, from, dir, spec)
+      link.send({ type: 'wave', id, i, from, dir })
+      return
+    }
     const range = spec.shot || spec.dist,
       hit = sight(from, dir, to, range, spec.shot ? 0.87 : 1.15)
     if (spec.shot)
@@ -223,6 +279,25 @@ export function match(link, hero, view, physics, onEvent) {
       return
     }
     if (!foe) return
+    if (
+      !link.host &&
+      phase === 'fight' &&
+      m.type === 'wave' &&
+      Number.isSafeInteger(m.id) &&
+      [0, 1].includes(m.i) &&
+      [m.from, m.dir].every((v) => v && [v.x, v.y, v.z].every(Number.isFinite)) &&
+      waves.length < 30
+    ) {
+      emitWave(m.id, m.i, m.from, m.dir, tideWave)
+    }
+    if (!link.host && m.type === 'wave-stop') {
+      const index = waves.findIndex((p) => p.id === m.id && p.band === m.band)
+      if (index >= 0) {
+        const [p] = waves.splice(index, 1)
+        p.done = true
+        display.sync(p)
+      }
+    }
     if (m.type === 'move' && Array.isArray(m.p) && m.p.length === 5 && m.p.every(Number.isFinite)) {
       const now = performance.now(),
         dt = Math.min(0.35, Math.max(0.015, (now - recvTime) / 1000))
@@ -249,6 +324,7 @@ export function match(link, hero, view, physics, onEvent) {
       time = m.time
     }
     if (!link.host && m.type === 'result') {
+      clearWaves()
       phase = m.phase
       score = m.score
       onEvent(
@@ -302,6 +378,7 @@ export function match(link, hero, view, physics, onEvent) {
           link.send({ type: 'reset', round })
         }
       }
+      if (phase === 'fight' && waves.length) tickWaves(dt)
       remoteModel.group.position.set(foe.pos.x, foe.pos.y, foe.pos.z)
       remoteModel.group.rotation.y = remoteYaw + Math.PI
       remoteModel.update(dt, false, false)
@@ -327,6 +404,8 @@ export function match(link, hero, view, physics, onEvent) {
         })
     },
     close() {
+      clearWaves()
+      display.dispose()
       remoteModel?.dispose()
       link.close()
     },

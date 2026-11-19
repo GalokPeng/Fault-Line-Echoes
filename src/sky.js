@@ -1,4 +1,5 @@
 import * as T from 'three'
+import { assetUrl } from './asset-url.js'
 
 const vertex = `varying vec3 dir;
 uniform mat3 orientation;uniform vec2 viewScale;
@@ -35,9 +36,12 @@ export function makeSky(scene, id) {
     panorama: { value: null },
     loaded: { value: 0 },
   }
-  const photo = new T.TextureLoader().load('/sky/' + (warm ? 'highveld' : 'cloudbank') + '.webp', () => {
-    uniforms.loaded.value = 1
-  })
+  const photo = new T.TextureLoader().load(
+    assetUrl('/sky/' + (warm ? 'highveld' : 'cloudbank') + '.webp'),
+    () => {
+      uniforms.loaded.value = 1
+    },
+  )
   photo.colorSpace = T.SRGBColorSpace
   photo.wrapS = T.RepeatWrapping
   uniforms.panorama.value = photo

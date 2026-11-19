@@ -1,0 +1,173 @@
+.exp-pack {
+  color: #ece8d6;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+.exp-summary {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 1fr;
+  gap: 14px;
+}
+.exp-meter > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 3px;
+  align-items: baseline;
+}
+.exp-meter span,
+.exp-line small {
+  color: #c2c4ae;
+  font-size: 0.78rem;
+}
+.exp-meter b {
+  font-size: 0.83rem;
+  font-weight: 600;
+  color: #f1e8c7;
+}
+.exp-meter progress {
+  display: block;
+  height: 3px;
+  width: 100%;
+  margin: 6px 0 0;
+  border: 0;
+  appearance: none;
+  background: #435049;
+  color: #c8b47d;
+}
+.exp-meter progress::-webkit-progress-bar {
+  background: #435049;
+}
+.exp-meter progress::-webkit-progress-value {
+  background: #c8b47d;
+}
+.exp-meter .exp-food::-webkit-progress-value {
+  background: #b5c394;
+}
+.exp-meter .exp-water::-webkit-progress-value {
+  background: #8bbdbf;
+}
+.exp-meter progress::-moz-progress-bar {
+  background: currentColor;
+}
+.exp-stats {
+  display: flex;
+  gap: 6px 14px;
+  flex-wrap: wrap;
+  font-size: 0.76rem;
+  color: #d3cebb;
+  margin: 14px 0;
+}
+.exp-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  border-bottom: 1px solid #73755270;
+}
+.exp-pack .exp-tabs button {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #bfbda7;
+  padding: 8px 12px;
+  border-bottom: 2px solid transparent;
+}
+.exp-pack .exp-tabs button[aria-pressed='true'] {
+  color: #f5deb0;
+  border-bottom-color: #d7b678;
+  background: #b9a97413;
+}
+.exp-feedback {
+  font-size: 0.8rem;
+  margin: 8px 0 2px;
+  color: #cedda8;
+}
+.exp-feedback:empty {
+  margin: 0;
+}
+.exp-rations {
+  display: block;
+  padding-top: 10px;
+  color: #b9bdac;
+  font-size: 0.73rem;
+  line-height: 1.5;
+}
+.exp-ill {
+  color: #eab7a0;
+}
+.exp-list {
+  max-height: min(47vh, 440px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #857b5c transparent;
+}
+.exp-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid #bbc8a222;
+  padding: 9px 1px;
+}
+.exp-line-text {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.exp-line-text b {
+  font-size: 0.91rem;
+  font-weight: 600;
+}
+.exp-line small {
+  line-height: 1.45;
+}
+.exp-prices {
+  padding: 9px 0;
+  font-size: 0.79rem;
+  color: #c7c8ae;
+}
+.exp-prices summary {
+  cursor: pointer;
+  color: #e2d6ad;
+}
+.exp-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 5px;
+  flex-shrink: 0;
+  max-width: 52%;
+}
+.exp-pack .exp-actions button {
+  font-size: 0.76rem;
+  padding: 5px 9px;
+  line-height: 1.45;
+  color: #f2e4bd;
+  background: #394335;
+  border: 1px solid #a79c6e70;
+  border-radius: 3px;
+}
+.exp-pack .exp-actions button:hover,
+.exp-pack button:focus-visible {
+  outline: 1px solid #e1c486;
+  outline-offset: 1px;
+}
+.exp-pack .exp-actions .exp-minor {
+  background: transparent;
+  color: #c0bcaa;
+}
+@media (max-width: 560px) {
+  .exp-summary {
+    gap: 7px;
+  }
+  .exp-actions {
+    max-width: 48%;
+  }
+  .exp-line {
+    gap: 5px;
+  }
+  .exp-stats {
+    gap: 4px 10px;
+  }
+}

@@ -18,6 +18,36 @@ const world = (id, name, english, city, wild, description, seed, level, trail, v
 })
 
 export const biomes = {
+  capital: {
+    id: 'capital',
+    name: '白砥城',
+    english: 'The Alabaster Crown',
+    city: '白砥城',
+    wild: '冠岭驿道',
+    description: '四条古道汇入雪白的城墙。市泉、染坊与铜顶王庭共用一座山脊，也共用城下的水脉。',
+    radius: 768,
+    level: 24,
+    seed: 72841,
+    spawn: [0, 22],
+    town: [0, 0],
+    landmark: [-54, -80],
+    trail: [
+      [0, 22],
+      [0, 0],
+      [0, -52],
+      [0, -110],
+      [0, -165],
+      [0, -216],
+      [0, -270],
+      [12, -333],
+      [31, -418],
+    ],
+    vista: { from: [47, 55, 80], to: [-43, 45, -98] },
+    sky: 0xbacfd5,
+    fog: 0xcdc8b5,
+    water: 0x457f8b,
+    waterLevel: 8,
+  },
   rain: world(
     'rain',
     '青雨林',
@@ -134,12 +164,14 @@ export function noise(x, z, s = 0) {
   )
 }
 export function riverX(id, z) {
+  if (id === 'capital') return 380 + 32 * Math.sin(z / 136) + 12 * Math.sin(z / 55)
   if (id === 'rain') return 92 + 31 * Math.sin(z / 96) + 13 * Math.sin(z / 41)
   if (id === 'root') return -177 + 38 * Math.sin(z / 121) + 17 * Math.sin(z / 53)
   if (id === 'gorge') return -111 + 49 * Math.sin(z / 118) + 21 * Math.sin(z / 59)
   return -87 + 16 * Math.sin(z / 68)
 }
 export function riverWidth(id, z) {
+  if (id === 'capital') return 11 + 3 * Math.sin(z / 125)
   if (id === 'rain') return 10 + 3 * Math.sin(z / 73)
   if (id === 'root') return 6 + 2 * Math.sin(z / 63)
   if (id === 'gorge') return 12 + 3 * Math.sin(z / 81)
@@ -219,6 +251,31 @@ function summit(id, x, z) {
 function rawHeight(id, x, z) {
   const b = biomes[id],
     base = b.level
+  if (id === 'capital') {
+    const edge = Math.max(Math.abs(x), Math.abs(z))
+    if (edge < 240) {
+      const vault =
+        fade(-103, -95, x) * (1 - fade(-82, -74, x)) * fade(-82, -71, z) * (1 - fade(-57, -32, z))
+      return base - 4.8 * vault
+    }
+    const hill = noise(x / 137, z / 119, b.seed),
+      ripple = noise(x / 38, z / 48, b.seed + 8)
+    const n = Math.max(0, -z - 315),
+      w = Math.max(0, -x - 440)
+    const belt = Math.exp(-Math.pow((z + 582 + 60 * Math.sin(x * 0.012)) / 139, 2))
+    const scarp = hill * 0.6 + Math.abs(Math.sin(x * 0.015 + 2 * hill)) * 0.4
+    const crags = 1 - Math.abs(2 * noise(x / 31, z / 35, b.seed + 34) - 1)
+    const mountain =
+      n * (0.16 + hill * 0.29) +
+      w * (0.11 + 0.22 * ripple) +
+      belt * (37 + 100 * scarp) +
+      fade(15, 170, n) * ((ripple - 0.5) * 29 + crags * crags * 19)
+    let y = base + fade(240, 385, edge) * ((hill - 0.4) * 47 + (ripple - 0.48) * 11 + mountain)
+    const waterDistance = Math.abs(x - riverX(id, z)),
+      width = riverWidth(id, z)
+    y = mix(b.waterLevel - 2.7, y, fade(width - 2, width + 23, waterDistance))
+    return y
+  }
   const broad = noise(x / 104, z / 104, b.seed) - 0.5,
     medium = noise(x / 39, z / 39, b.seed + 2) - 0.5
   let h = base + summit(id, x, z)

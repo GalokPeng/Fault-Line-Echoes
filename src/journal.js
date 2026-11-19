@@ -1,5 +1,6 @@
 import { biomes, heightAt } from './biomes.js'
 import { main, side, steps, skins, gear } from './story.js'
+import { oldSluice } from './field-world.js'
 const storage = 'faultline.atlas.v1'
 export function fresh() {
   return {
@@ -17,6 +18,7 @@ export function fresh() {
     positions: {},
     ending: '',
     visited: [],
+    field: { rescue: '', rescued: false, badge: false, taken: {} },
   }
 }
 export function readSave() {
@@ -65,6 +67,7 @@ export function completeStep(data, which, choice) {
   }
 }
 export function positions(id, town) {
+  if (id === 'capital') return {}
   const b = biomes[id],
     f = (kind) => town.features.find((p) => p.kind === kind),
     g = (x, z) => ({ x, z, y: heightAt(id, x, z) })
@@ -78,6 +81,7 @@ export function positions(id, town) {
     gate = f('gate'),
     stairs = f('stairs')
   return {
+    ...(id === 'rain' ? oldSluice() : {}),
     camp: g(1, 10),
     gate: gate || tr(1),
     watch: upper,

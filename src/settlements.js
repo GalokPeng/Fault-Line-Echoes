@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { createCapital } from './capital.js'
 import { biomes, heightAt } from './biomes.js'
 import { releaseGeometry } from './settlement-geometry.js'
 import { makeContext, at, addFeature, gable, awning } from './settlement-kit.js'
@@ -9,7 +10,7 @@ const details = {
     tower: '听雨楼',
     cellar: '沉潮水库',
     shops: ['渡船社', '雨布行', '晒茶坊', '行水驿'],
-    people: ['乔芮', '阿弦', '林舟', '禾清', '滕叔', '温砚'],
+    people: ['乔芮', '梅枝', '林舟', '禾清', '滕叔', '温砚'],
   },
   salt: {
     tower: '四风塔',
@@ -533,6 +534,7 @@ const layouts = {
   ],
 }
 export function createSettlement(scene, id) {
+  if (id === 'capital') return createCapital(scene)
   const group = new THREE.Group()
   group.name = biomes[id].city
   scene.add(group)

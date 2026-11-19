@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { tradePoses } from './capital-trade-poses.js'
 import { Batch, beam, shape, releaseGeometry } from './settlement-geometry.js'
 
 const material = new THREE.MeshStandardMaterial({
@@ -149,7 +150,7 @@ function person(group, kind, id, color) {
       }),
     )
   }
-  return (phase, walk, strike, t, tell = 0) => {
+  const pose = (phase, walk, strike, t, tell = 0) => {
     torso.position.y = 0.83 + Math.abs(Math.sin(phase)) * 0.034 * walk + Math.sin(t * 2) * 0.006
     torso.rotation.y = Math.sin(phase) * 0.055 * walk + Math.sin(strike * Math.PI) * 0.16
     torso.rotation.x = -tell * 0.14
@@ -162,6 +163,8 @@ function person(group, kind, id, color) {
         tell * (i ? 1.05 : 0.48)
     })
   }
+  if (id === 'capital' && kind === 'resident') pose.trade = tradePoses(buildPart, torso, head, arms)
+  return pose
 }
 function creature(group, id, species = {}) {
   const form = species.form || { rain: 'drake', salt: 'scorpion', root: 'boar', gorge: 'bird' }[id]
@@ -552,7 +555,11 @@ export function createActor(kind, id, color) {
     strike = 1
   return {
     group,
+    setWork(action, onImpact) {
+      animate.trade?.set(action, onImpact)
+    },
     fall(seconds, side = 1) {
+      animate.trade?.set(null)
       const progress = THREE.MathUtils.smoothstep(seconds, 0, 0.62)
       body.rotation.z = side * 1.36 * progress
       body.rotation.x = -0.1 * progress
@@ -578,6 +585,7 @@ export function createActor(kind, id, color) {
         windup ? Math.min(1, 0.19 + windup.progress * 1.15) : 0,
         windup?.type,
       )
+      animate.trade?.update(dt, moving, attacking || Boolean(windup))
     },
     dispose: () => releaseGeometry(group),
   }

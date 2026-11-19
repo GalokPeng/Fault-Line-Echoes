@@ -18,6 +18,11 @@ export const items = {
   dates: good('风干枣', 0.25, 0.13, { food: 16 }),
   fruit: good('林浆果', 0.32, 0.21, { food: 9, water: 6 }),
   water: good('清水', 0.5, 0.5, { water: 22 }),
+  stomachTonic: good('草露药剂', 0.18, 0.16, {
+    relief: 4,
+    source: '白砥城 · 回春药铺',
+    purpose: '服用一瓶，腹部不适的剩余时间缩短 4 个游戏小时。',
+  }),
   riverWater: good('溪河生水', 0.5, 0.5, { water: 22, risk: 0.32 }),
   dirtyWater: good('受污染的积水', 0.5, 0.5, { water: 17, risk: 1 }),
   torch: good('松脂火把', 0.95, 0.46),
@@ -40,6 +45,35 @@ export const items = {
   gorgeGreaves: good('崖鸣胫甲', 2.45, 2.16, { slot: 'legs', armor: 15, boss: 'gorge' }),
   ...harvestItems,
 }
+const originNotes = {
+  bun: ['程记包子铺、驿站', '行路干粮，可以分给广场的乞儿。'],
+  meat: ['梁家肉铺、客栈', '已经烤熟，食用可补充饱食。'],
+  dates: ['白盐城驼队、四境行栈', '体积小的干粮，适合留在路上。'],
+  fruit: ['古根绳匠铺', '酸甜的林果，可以补充饱食和水分。'],
+  water: ['井泉、客栈或煮水', '每份半升，可以直接饮用。'],
+  riverWater: ['野外溪河', '可在炉边煮成清水，生饮有引发不适的风险。'],
+  dirtyWater: ['盐洼或滞水河段', '含有沉积物，建议在游戏内靠近火源煮成清水。'],
+  torch: ['行栈、林区绳匠铺', '点亮后随身照明，松脂燃尽后熄灭。'],
+  resin: ['古根绳匠铺、四境行栈', '可在汇流镇或四境行栈换取火把。'],
+  hides: ['商队流通的熟皮', '白盐城和青雨林的商人会收购。'],
+  ore: ['山地商队', '可卖给铁匠，或在鸣铁铸坊换取短刀。'],
+  cloth: ['白砥城 · 练家衣坊', '可用于缝制驮袋，也可在衣坊换护衣。'],
+  fieldPack: ['衣坊、行栈与四境工坊', '把驮袋系在背包上，携行容量永久提升至 28 L。'],
+  staff: ['古根绳匠铺', '轻便的行脚杖，握在手中可增强近身攻击。'],
+  saltKnife: ['白盐城、鸣铁铸坊', '适合近身战斗的单手短刃。'],
+  reedHat: ['汇流镇、练家衣坊', '头部护具，轻薄的箬叶和藤圈易于携带。'],
+  linenCoat: ['衣坊和峡谷铁匠行', '用夹层布保护躯干。'],
+  workLegs: ['鸣铁铸坊、峡谷工坊', '护住腿部，装上后提供减伤。'],
+  boots: ['巡线任务、衣坊或雨林工坊', '稳固的靴底保护脚部，穿戴后提升步速。'],
+  softBoots: ['巡线任务、衣坊或白盐工坊', '柔软的鞋套减轻足部负担。'],
+  harness: ['巡线任务、衣坊或古根工坊', '身上穿戴的轻型背带可增强耐力恢复。'],
+  rainFang: ['鸣皇长牙与背鳍条 · 铁匠制作', '专属武器，以鳍条绑固牙尖。'],
+  saltCrown: ['盐母头胸甲与螯壳 · 铁匠制作', '头部护具，两侧螯片可保护面颊。'],
+  rootMantle: ['守望者肩皮与冠角 · 衣坊制作', '躯干护具，由厚皮和角扣缝合。'],
+  gorgeGreaves: ['赤翎胫鳞与覆羽 · 铁匠制作', '腿部护具，覆羽衬在鳞片和绑带之间。'],
+}
+for (const [id, [source, purpose]] of Object.entries(originNotes))
+  Object.assign(items[id], { source, purpose })
 export const storyLoot = {
   护底靴: 'boots',
   软底护套: 'softBoots',
@@ -90,8 +124,15 @@ export const markets = {
 
 const capitalClue = '向西出雨渡门通青雨林，向东过盐商门进白盐旱漠；古木门在北，赤崖门在南。'
 export const capitalTrades = {
+  pharmacy: {
+    name: '回春药铺',
+    craft: '谢兰心将草露封进便携的小药瓶，供饮过坏水的行旅使用。',
+    stock: { stomachTonic: 3 },
+    buys: {},
+    barter: null,
+  },
   baker: {
-    name: '程记炉饼',
+    name: '程记包子铺',
     craft: '程麦的炉屉一早就热，只出蒸包子。',
     stock: { bun: 2 },
     buys: {},

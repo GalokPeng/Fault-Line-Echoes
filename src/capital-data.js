@@ -5,6 +5,12 @@ export const capitalGates = [
   ['north', '北门 · 古木门', 0, -216, 'root'],
   ['south', '南门 · 赤崖门', 0, 216, 'gorge'],
 ]
+// Coordinates and facing for the three working benches. People can leave these on schedule.
+export const capitalWork = {
+  baker: { action: 'baker', x: -20, z: 13, yaw: 0 },
+  smith: { action: 'smith', x: 108, z: 76, yaw: 0 },
+  pharmacy: { action: 'pharmacy', x: 58.3, z: -21.6, yaw: -Math.PI / 2 },
+}
 
 const station = (id, name, job, service, x, z, guard = false) => ({
   id,
@@ -15,12 +21,14 @@ const station = (id, name, job, service, x, z, guard = false) => ({
   z,
   y: civicLevel,
   guard,
+  ...(capitalWork[service] ? { workstation: capitalWork[service], yaw: capitalWork[service].yaw } : {}),
 })
 export const capitalNpcs = [
-  station('baker', '程麦', '炉饼师', 'baker', -20, 13),
+  station('baker', '程麦', '蒸包师傅', 'baker', -20, 13),
   station('butcher', '梁刀生', '东市屠户', 'butcher', 70, 30),
   station('merchant', '云葵', '行脚货商', 'merchant', 15, -18),
   station('smith', '孟砧', '铸坊铁匠', 'smith', 108, 76),
+  station('pharmacy', '谢兰心', '药师', 'pharmacy', 58.3, -21.6),
   station('outfitter', '练红', '西市裁衣师', 'outfitter', -108, 47),
   station('inn', '沉榆', '长灯客栈掌柜', 'inn', -47, 64),
   station('beggar', '小满', '广场乞儿', 'beggar', 5, 27),
@@ -39,6 +47,8 @@ export const capitalNpcs = [
   station('armiger', '杨溪', '白砥仪仗卫', 'guard', 5.2, -29, true),
   station('guard-plaza', '祁铮', '广场巡卫', 'guard', -7, 25, true),
   station('guard-watch', '罗缨', '街市巡卫', 'guard', 23, -3, true),
+  station('guard-east-market', '汪垣', '东市巡卫', 'guard', 101, 56, true),
+  station('guard-west-market', '项采', '西市巡卫', 'guard', -57, 50, true),
   station('guard-west', '沈弦', '西门守卫', 'guard', -201, 6, true),
   station('guard-east', '顾岩', '东门守卫', 'guard', 201, -6, true),
   station('guard-north', '林竹', '北门守卫', 'guard', 6, -201, true),
@@ -58,23 +68,32 @@ export const capitalFeatures = [
   place('wall-stair', '南城墙阶梯', 'wallStairs', 28, 181),
   place('wall-walk', '南城墙巡道', 'wall', 28, 216, { y: civicLevel + 12 }),
   place('forge', '东南铸坊', 'district', 108, 78),
+  place('apothecary', '回春药铺', 'district', 58.3, -22.5),
   place('loom', '织锦巷', 'district', -108, 49),
   place('market', '东肉市', 'district', 70, 32),
-  place('loaves', '程记炉饼', 'owned', -20, 15.8, { owner: 'baker', ownerName: '程麦', item: 'bun' }),
+  place('loaves', '程记鲜包', 'owned', -20, 15.8, {
+    owner: 'baker',
+    ownerName: '程麦',
+    item: 'bun',
+    displayHeight: 1.14,
+  }),
   place('meat-rack', '梁家鲜肉', 'owned', 70, 32.8, {
     owner: 'butcher',
     ownerName: '梁刀生',
     item: 'meat',
+    displayHeight: 0.96,
   }),
   place('fabric', '练家织物', 'owned', -108, 49.8, {
     owner: 'outfitter',
     ownerName: '练红',
     item: 'cloth',
+    displayHeight: 0.99,
   }),
   place('market-stock', '行商的货架', 'owned', 17.8, -18, {
     owner: 'merchant',
     ownerName: '云葵',
     item: 'bun',
+    displayHeight: 0.95,
   }),
   place('torch-square', '广场引火盆', 'torch', -5, 18),
   place('torch-inn', '旅店门前火盆', 'torch', -42, 64),
@@ -86,10 +105,11 @@ export const capitalFeatures = [
 ]
 // Storefronts are set back from the street-side trading positions.
 export const capitalShops = [
-  ['baker', -29, 12, Math.PI / 2, 10, 10, 5.7, '程记炉饼'],
+  ['baker', -29, 12, Math.PI / 2, 10, 10, 5.7, '程记包子铺'],
   ['butcher', 70, 40, Math.PI, 12, 12, 6.1, '梁家肉铺'],
   ['merchant', 15, -29, 0, 12, 13, 6.7, '四境行栈'],
   ['smith', 119, 76, -Math.PI / 2, 16, 14, 7.2, '鸣铁铸坊'],
+  ['pharmacy', 66, -19, -Math.PI / 2, 13, 12, 6.5, '回春药铺'],
   ['outfitter', -119, 47, Math.PI / 2, 12, 14, 7.1, '练家衣坊'],
   ['inn', -58, 64, Math.PI / 2, 17, 17, 7.5, '长灯客栈'],
   ['stable', -171, -35, 0, 17, 13, 5.3, '西驿马厩'],

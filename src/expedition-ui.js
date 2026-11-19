@@ -1,16 +1,5 @@
-import {
-  items,
-  slots,
-  sources,
-  marketFor,
-  recipesFor,
-  buyerNames,
-  aidFor,
-  expeditionStats,
-  operate,
-  TORCH_HOURS,
-  LARGE_CAPACITY,
-} from './expedition.js'
+import { items, sources, marketFor, recipesFor, aidFor, expeditionStats, operate } from './expedition.js'
+import { inventoryGrid, picture } from './expedition-grid.js'
 import './expedition.css'
 
 function element(tag, label, cls) {
@@ -23,6 +12,7 @@ const format = (n) => Number(n.toFixed(2)).toString()
 
 function attributes(item) {
   const parts = []
+  if (item.relief) parts.push('不适时间 −' + item.relief + ' 小时')
   if (item.food) parts.push('饱食 +' + item.food)
   if (item.water) parts.push('水分 +' + item.water)
   if (item.risk === 1) parts.push('饮用会引发不适')
@@ -41,7 +31,7 @@ export function openPack(container, pack, context = {}, onChange = () => {}) {
     (context.merchant ? 'market' : aid || context.waterSource || context.fire ? 'local' : 'bag')
   let feedback = ''
   let success = true
-  let pendingDrop = ''
+  const state = { key: '', drop: '' }
   const panel = element('div', null, 'exp-pack')
   container.replaceChildren(panel)
   function button(title, fn, css) {
@@ -50,11 +40,14 @@ export function openPack(container, pack, context = {}, onChange = () => {}) {
     b.onclick = fn
     return b
   }
-  function trigger(action, id) {
+  function trigger(action, id, onSuccess) {
     const result = operate(pack, action, id, context)
     feedback = result.message
     success = result.ok
-    if (result.ok) onChange(result)
+    if (result.ok) {
+      onSuccess?.()
+      onChange(result)
+    }
     render()
   }
   const act = (label, action, id, cls) => button(label, () => trigger(action, id), cls)
@@ -62,11 +55,12 @@ export function openPack(container, pack, context = {}, onChange = () => {}) {
   function cookable() {
     return Object.keys(pack.items).filter((id) => items[id].dish)
   }
-  function line(name, detail, actions = []) {
+  function line(name, detail, actions = [], icon = '') {
     const li = element('div', null, 'exp-line'),
       text = element('div', null, 'exp-line-text')
     text.append(element('b', name))
     if (detail) text.append(element('small', detail))
+    if (icon) li.append(picture(icon, 'exp-shop-icon'))
     li.append(text)
     if (actions.length) {
       const group = element('div', null, 'exp-actions')
@@ -85,87 +79,6 @@ export function openPack(container, pack, context = {}, onChange = () => {}) {
     bar.setAttribute('aria-label', label)
     wrap.append(row, bar)
     return wrap
-  }
-  function possessions(list) {
-    const stock = Object.entries(pack.items)
-    if (!stock.length)
-      list.append(line('行囊是空的', '城中居民会分你干粮和饮水。狩猎所得可带到集市换行券。'))
-    for (const [id, qty] of stock) {
-      const item = items[id],
-        actions = []
-      if (item.food || item.water) actions.push(act(item.food ? '吃一份' : '喝一份', 'use', id))
-      if (item.slot) actions.push(act('装备', 'equip', id))
-      if (id === 'fieldPack' && !pack.upgraded) actions.push(act('扩容', 'upgrade', id))
-      if (id === 'torch' && !pack.torchLit && !pack.torchHours) actions.push(act('点亮', 'light', id))
-      if ((context.fire || atButcher) && item.dish) actions.push(act('烤熟', 'cook', id))
-      if (context.fire && ['riverWater', 'dirtyWater'].includes(id))
-        actions.push(act('煮水', 'boil', id))
-      const discard = button(
-        pendingDrop === id ? '确定放下 1 份' : '放下',
-        () => {
-          if (pendingDrop === id) {
-            pendingDrop = ''
-            trigger('drop', id)
-          } else {
-            pendingDrop = id
-            render()
-          }
-        },
-        'exp-minor',
-      )
-      actions.push(discard)
-      const stats = [
-        format(item.volume * qty) + ' L',
-        format(item.mass * qty) + ' kg',
-        ...attributes(item),
-      ]
-      if (id === 'torch') stats.push('每支 ' + TORCH_HOURS + ' 小时')
-      if (id === 'fieldPack') stats.push('容量提升至 ' + LARGE_CAPACITY + ' L')
-      const row = line(item.name + ' × ' + qty, stats.join(' · '), actions)
-      if (item.source) {
-        const origin =
-          '来源　' + item.source + (item.buyer ? '　·　' + buyerNames[item.buyer] + '收购' : '')
-        row
-          .querySelector('.exp-line-text')
-          .append(element('small', origin), element('small', item.purpose))
-      }
-      list.append(row)
-    }
-    if (pack.torchHours > 0)
-      list.append(
-        line(
-          '随身火把 · ' + (pack.torchLit ? '燃烧中' : '已熄灭'),
-          '剩余 ' + format(pack.torchHours) + ' 游戏小时',
-          [act(pack.torchLit ? '熄灭' : '重新点亮', 'torch')],
-        ),
-      )
-    for (const [id, qty] of Object.entries(pack.pending))
-      list.append(
-        line('待领 · ' + items[id].name + ' × ' + qty, '任务奖励暂存于此，腾出容量后可收回。', [
-          act('收进包里', 'claim', id),
-        ]),
-      )
-  }
-  function equipment(list) {
-    for (const [slot, name] of Object.entries(slots)) {
-      const id = pack.equipped[slot]
-      list.append(
-        line(
-          name + '　' + (id ? items[id].name : slot === 'weapon' ? '空手' : '空'),
-          id ? attributes(items[id]).join(' · ') : slot === 'weapon' ? '保留角色本身的徒手招式。' : '',
-          id ? [act('卸下', 'unequip', slot, 'exp-minor')] : [],
-        ),
-      )
-    }
-    for (const id of Object.keys(pack.items)) {
-      const item = items[id]
-      if (item.slot)
-        list.append(
-          line('备选 · ' + item.name, slots[item.slot] + ' · ' + attributes(item).join(' · '), [
-            act('换上', 'equip', id),
-          ]),
-        )
-    }
   }
   function local(list) {
     if (context.waterSource && sources[context.waterSource]) {
@@ -226,7 +139,12 @@ export function openPack(container, pack, context = {}, onChange = () => {}) {
         ([id, qty]) => items[id].name + ' ' + (pack.items[id] || 0) + '/' + qty,
       )
       list.append(
-        line('工坊 · ' + items[product].name, needed.join('　'), [act('委托制作', 'craft', product)]),
+        line(
+          '工坊 · ' + items[product].name,
+          needed.join('　'),
+          [act('委托制作', 'craft', product)],
+          product,
+        ),
       )
     }
     const exchange = shop.barter
@@ -246,15 +164,20 @@ export function openPack(container, pack, context = {}, onChange = () => {}) {
       )
     for (const [id, price] of Object.entries(shop.stock)) {
       const info = ['每件 ' + format(items[id].volume) + ' L', ...attributes(items[id])]
-      list.append(line(items[id].name, info.join(' · '), [act('买入 · ' + price + ' 券', 'buy', id)]))
+      list.append(
+        line(items[id].name, info.join(' · '), [act('买入 · ' + price + ' 券', 'buy', id)], id),
+      )
     }
     const absent = []
     for (const [id, price] of Object.entries(shop.buys)) {
       if (pack.items[id])
         list.append(
-          line('收购 · ' + items[id].name, '持有 ' + pack.items[id], [
-            act('卖出 · ' + price + ' 券', 'sell', id),
-          ]),
+          line(
+            '收购 · ' + items[id].name,
+            '持有 ' + pack.items[id],
+            [act('卖出 · ' + price + ' 券', 'sell', id)],
+            id,
+          ),
         )
       else absent.push(items[id].name + ' ' + price + ' 券')
     }
@@ -296,20 +219,27 @@ export function openPack(container, pack, context = {}, onChange = () => {}) {
       const b = button(name, () => {
         tab = key
         feedback = ''
-        pendingDrop = ''
+        state.drop = ''
         render()
         panel.querySelector('.exp-list').scrollTop = 0
+        panel.querySelector('[data-tab="' + key + '"]').focus({ preventScroll: true })
       })
+      b.dataset.tab = key
       b.setAttribute('aria-pressed', String(tab === key))
       nav.append(b)
     }
     const out = element('p', feedback, 'exp-feedback' + (success ? '' : ' exp-ill'))
     out.setAttribute('role', 'status')
     const list = element('div', null, 'exp-list')
-    if (tab === 'gear') equipment(list)
-    else if (tab === 'market') market(list)
+    if (tab === 'market') market(list)
     else if (tab === 'local') local(list)
-    else possessions(list)
+    else
+      inventoryGrid(list, pack, context, state, {
+        render,
+        trigger,
+        attributes,
+        gearOnly: tab === 'gear',
+      })
     const ration = element(
       'small',
       '平常一天约需 4 只包子和 2 L 水。快跑、攀爬更费口粮，旱热时饮水消耗更快。',

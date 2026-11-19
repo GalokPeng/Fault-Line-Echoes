@@ -1,5 +1,16 @@
 import * as T from 'three'
-import { biomes, gridData, gridDivisions, heightAt, riverX, riverWidth, hash, noise } from './biomes.js'
+import {
+  biomes,
+  gridData,
+  gridDivisions,
+  heightAt,
+  riverX,
+  riverWidth,
+  waterAt,
+  hash,
+  noise,
+} from './biomes.js'
+import { createWater } from './water-render.js'
 import { civicLevel } from './capital-data.js'
 import { plantMaterials, treeKit } from './landscape-assets.js'
 
@@ -209,26 +220,6 @@ function boulevard(group) {
   group.add(star)
 }
 function outskirts(group, solids) {
-  const water = new T.MeshStandardMaterial({
-    color: '#538b94',
-    roughness: 0.3,
-    metalness: 0.16,
-    side: T.DoubleSide,
-  })
-  const pos = [],
-    idx = []
-  for (let i = 0; i <= 200; i++) {
-    const z = -768 + (1536 * i) / 200,
-      x = riverX(id, z),
-      w = riverWidth(id, z) + 0.9
-    pos.push(x - w, 8, z, x + w, 8, z)
-    if (i) idx.push(i * 2 - 2, i * 2, i * 2 - 1, i * 2 - 1, i * 2, i * 2 + 1)
-  }
-  const g = new T.BufferGeometry()
-  g.setAttribute('position', new T.Float32BufferAttribute(pos, 3))
-  g.setIndex(idx)
-  g.computeVertexNormals()
-  group.add(new T.Mesh(g, water))
   const trees = [],
     caps = []
   for (let i = 0; i < 850; i++) {
@@ -238,7 +229,7 @@ function outskirts(group, solids) {
       Math.max(Math.abs(x), Math.abs(z)) < 246 ||
       Math.abs(x) < 7 ||
       Math.abs(z) < 7 ||
-      Math.abs(x - riverX(id, z)) < riverWidth(id, z) + 1
+      waterAt(id, x, z).canCollect
     )
       continue
     const h = 4 + hash(i, 3, 61) * 10,
@@ -377,6 +368,7 @@ export function createCapitalLandscape(scene) {
   group.name = 'capital-landscape'
   group.add(ground)
   scene.add(group)
+  const water = createWater(group, id, ground, solids)
   boulevard(group)
   outskirts(group, solids)
   cityGardens(group, solids)
@@ -384,13 +376,16 @@ export function createCapitalLandscape(scene) {
   return {
     ground,
     solids,
+    setWaterActor: water.setActor,
     update(dt, time, day, cam) {
+      water.update(time, day)
       scene.userData.capitalCamera = cam.position || cam
     },
     dispose() {
       group.traverse((o) => {
         if (o.geometry) o.geometry.dispose()
         if (o.material) {
+          o.material.normalMap?.dispose()
           o.material.map?.dispose()
           o.material.dispose()
         }

@@ -293,6 +293,15 @@ export function operate(pack, act, id, ctx = {}) {
     return yes('已装备' + item.name + '。')
   }
   if (act === 'use' || act === 'eat' || act === 'drink') {
+    if (item.relief && act === 'use') {
+      if (pack.sickness <= 0) return no('当前没有腹部不适，药剂可以留待旅途使用。')
+      const used = adjust(pack, { [id]: -1 })
+      if (!used.ok) return used
+      pack.sickness = Math.max(0, pack.sickness - item.relief)
+      return yes(
+        pack.sickness ? '服用了草露药剂，腹部不适时间缩短了。' : '服用了草露药剂，腹部不适已经消退。',
+      )
+    }
     const used = drinkOrEat(pack, id)
     if (used.ok) adjust(pack, { [id]: -1 })
     return used

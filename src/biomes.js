@@ -1,3 +1,6 @@
+import { carveWaterBed } from './water-profile.js'
+import { createWaterSystem } from './water-system.js'
+export { riverX, riverWidth } from './water-profile.js'
 // All coordinates are metres. Positive Y is up, north is -Z.
 const world = (id, name, english, city, wild, description, seed, level, trail, vista, colors) => ({
   id,
@@ -163,20 +166,6 @@ export function noise(x, z, s = 0) {
     v,
   )
 }
-export function riverX(id, z) {
-  if (id === 'capital') return 380 + 32 * Math.sin(z / 136) + 12 * Math.sin(z / 55)
-  if (id === 'rain') return 92 + 31 * Math.sin(z / 96) + 13 * Math.sin(z / 41)
-  if (id === 'root') return -177 + 38 * Math.sin(z / 121) + 17 * Math.sin(z / 53)
-  if (id === 'gorge') return -111 + 49 * Math.sin(z / 118) + 21 * Math.sin(z / 59)
-  return -87 + 16 * Math.sin(z / 68)
-}
-export function riverWidth(id, z) {
-  if (id === 'capital') return 11 + 3 * Math.sin(z / 125)
-  if (id === 'rain') return 10 + 3 * Math.sin(z / 73)
-  if (id === 'root') return 6 + 2 * Math.sin(z / 63)
-  if (id === 'gorge') return 12 + 3 * Math.sin(z / 81)
-  return 39 * Math.sqrt(Math.max(0, 1 - Math.pow((z + 164) / 110, 2)))
-}
 export function trailDistance(id, x, z) {
   const path = biomes[id].trail
   let distance = Infinity
@@ -270,39 +259,27 @@ function rawHeight(id, x, z) {
       w * (0.11 + 0.22 * ripple) +
       belt * (37 + 100 * scarp) +
       fade(15, 170, n) * ((ripple - 0.5) * 29 + crags * crags * 19)
-    let y = base + fade(240, 385, edge) * ((hill - 0.4) * 47 + (ripple - 0.48) * 11 + mountain)
-    const waterDistance = Math.abs(x - riverX(id, z)),
-      width = riverWidth(id, z)
-    y = mix(b.waterLevel - 2.7, y, fade(width - 2, width + 23, waterDistance))
-    return y
+    const y = base + fade(240, 385, edge) * ((hill - 0.4) * 47 + (ripple - 0.48) * 11 + mountain)
+    return carveWaterBed(b, x, z, y, gridDivisions, ripple - 0.5)
   }
   const broad = noise(x / 104, z / 104, b.seed) - 0.5,
     medium = noise(x / 39, z / 39, b.seed + 2) - 0.5
   let h = base + summit(id, x, z)
-  const d = Math.abs(x - riverX(id, z)),
-    width = riverWidth(id, z)
   if (id === 'rain') {
     h += broad * 49 + medium * 13 + noise(x / 14, z / 14, b.seed) * 2
-    h = mix(b.waterLevel - 2.9 + 0.5 * medium, h, fade(width - 1.8, width + 26, d))
   } else if (id === 'salt') {
     const dune = Math.sin(0.039 * x + 0.017 * z + 4.3 * noise(x / 130, z / 130, b.seed))
     const dunefield = fade(76, 200, Math.hypot(x * 0.88, z * 0.8))
     h += broad * 17 + medium * 4 + Math.pow(0.5 + 0.5 * dune, 2.2) * 17 * dunefield
-    const lake = Math.hypot((x - riverX(id, z)) / 42, (z + 164) / 110)
-    h = mix(b.waterLevel - 1.5, h, fade(0.82, 1.77, lake))
   } else if (id === 'root') {
     h += broad * 37 + medium * 10 + 1.5 * Math.sin(z / 15 + Math.sin(x / 26))
-    h = mix(b.waterLevel - 2, h, fade(width - 2, width + 39, d))
   } else {
     h += broad * 20 + medium * 7
-    const cut = fade(width, width + 60 + 10 * Math.sin(z * 0.034), d)
-    const bench = 0.66 * cut + 0.34 * clamp((Math.floor(cut * 5) + smooth((cut * 5) % 1)) / 5)
-    h = mix(b.waterLevel - 4, h, bench)
   }
   h = mix(base, h, fade(55, 91, Math.hypot(x, z)))
   // Rock cellar entered down its long south-facing embankment.
   const cellar = fade(9, 17, x) * (1 - fade(30, 38, x)) * fade(-18, -9, z) * (1 - fade(8, 25, z))
-  return h - 4.8 * cellar
+  return carveWaterBed(b, x, z, h - 4.8 * cellar, gridDivisions, medium)
 }
 const samples = new Map()
 export function gridData(id) {
@@ -334,3 +311,4 @@ export function heightAt(id, x, z) {
     d = g[a + n + 2]
   return fx + fz <= 1 ? h + (b - h) * fx + (c - h) * fz : d + (c - d) * (1 - fx) + (b - d) * (1 - fz)
 }
+export const { waterAt, waterSurfaceData } = createWaterSystem(biomes, gridDivisions, gridData, heightAt)

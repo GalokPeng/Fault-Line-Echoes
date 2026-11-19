@@ -12,6 +12,7 @@ import {
   flag,
 } from './capital-architecture.js'
 import { castle, curtain } from './capital-citadel.js'
+import { buildShops, workshopEffects } from './capital-workshops.js'
 import { heightAt, hash } from './biomes.js'
 
 const pi = Math.PI
@@ -124,7 +125,7 @@ function house(city, x, z, yaw, w, d, h, index, shop = null, label = '') {
       det.box('marble', hue.ash, -w * 0.31, 0.79, -d * 0.19, 2.32, 1.57, 2.17, true)
       det.box('metal', hue.ink, -w * 0.31, 1.62, -d * 0.19, 1.77, 0.42, 1.35)
       brazier(det, w * 0.31, 0)
-    } else {
+    } else if (shop !== 'pharmacy' && shop !== 'baker') {
       det.box('wood', hue.wood, 0, 0.89, -f + 1.67, w * 0.55, 0.19, 1.22)
       for (const s of [-1, 1]) det.box('wood', hue.wood, s * w * 0.22, 0.41, -f + 1.67, 0.19, 0.82, 0.19)
       det.barrel(w * 0.37, 0, -f + 1.3, 1.6)
@@ -282,14 +283,10 @@ function quarters(city) {
     const [shop, x, z, yaw, w, d, h, label] = row
     house(city, x, z, yaw, w, d, h, 300 + i, shop, label)
   }
-  const tools = city.kit(109, 73)
-  tools.box('marble', hue.base, 0, 0.49, 0, 1.55, 0.98, 1.06, true)
-  tools.box('metal', hue.ink, 0, 1.04, 0, 1.87, 0.27, 0.79)
-  tools.cyl('metal', hue.ink, -0.93, 1.0, 0, 0.3, 0.69, 0.3, 0, 1, 6, 0, pi / 2)
   for (const feature of capitalFeatures) {
     const b = city.kit(feature.x, feature.z)
     if (feature.kind === 'torch') brazier(b, 0, 0)
-    if (feature.kind !== 'owned') continue
+    if (feature.kind !== 'owned' || feature.id === 'loaves') continue
     b.box('wood', hue.wood, 0, 0.76, 0, 1.53, 0.15, 0.92, true)
     for (const s of [-1, 1]) b.box('wood', hue.wood, s * 0.55, 0.36, 0, 0.14, 0.73, 0.68)
     for (let j = 0; j < 4; j++) {
@@ -309,6 +306,8 @@ export function createCapital(scene) {
   castle(city)
   library(city)
   curtain(city)
+  const releaseShops = buildShops(city),
+    craft = workshopEffects(scene)
   city.finish()
   const features = capitalFeatures.map((f) => ({
     ...f,
@@ -318,9 +317,15 @@ export function createCapital(scene) {
     colliders: city.colliders,
     features,
     npcSpawns: capitalNpcs,
+    workImpact: craft.impact,
     update(dt, time, daylight) {
       city.update(daylight, time)
+      craft.update(dt, time)
     },
-    dispose: () => city.dispose(),
+    dispose() {
+      releaseShops()
+      craft.dispose()
+      city.dispose()
+    },
   }
 }

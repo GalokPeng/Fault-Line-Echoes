@@ -1,4 +1,4 @@
-import { biomes, heightAt } from './biomes.js'
+import { biomes, heightAt, waterAt } from './biomes.js'
 
 const links = [
   [
@@ -76,10 +76,15 @@ function pass(id, gate) {
   const best = new Float64Array(N * N).fill(Infinity),
     prev = new Int32Array(N * N).fill(-1)
   const heights = new Float32Array(N * N).fill(NaN),
+    wet = new Uint8Array(N * N),
     left = new Map([[begin, 0]])
   best[begin] = 0
   const elevation = (i) => {
-    if (Number.isNaN(heights[i])) heights[i] = heightAt(id, ...toWorld(i))
+    if (Number.isNaN(heights[i])) {
+      const w = waterAt(id, ...toWorld(i))
+      heights[i] = w.bed
+      wet[i] = w.wet ? 1 : 0
+    }
     return heights[i]
   }
   let reached = false
@@ -113,8 +118,7 @@ function pass(id, gate) {
       const i = index(xx, zz),
         dist = cell * Math.hypot(dx, dz),
         slope = Math.abs(elevation(i) - elevation(v)) / dist
-      const score =
-        best[v] + dist * (1 + slope * slope * 11 + (elevation(i) < b.waterLevel + 0.25 ? 7 : 0))
+      const score = best[v] + dist * (1 + slope * slope * 11 + (wet[i] ? 7 : 0))
       if (score >= best[i]) continue
       best[i] = score
       prev[i] = v

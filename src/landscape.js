@@ -1,11 +1,13 @@
 import * as THREE from 'three'
 import { onBorderRoad } from './borders.js'
+import { createWater } from './water-render.js'
 import { createCapitalLandscape } from './capital-landscape.js'
 import {
   biomes,
   gridDivisions,
   gridData,
   heightAt,
+  waterAt,
   noise,
   clamp,
   mix,
@@ -243,72 +245,6 @@ function road(id, group) {
   group.add(mesh)
   return mesh
 }
-const waterVertex = `
-varying vec3 wPos;
-#include <fog_pars_vertex>
-void main(){wPos=(modelMatrix*vec4(position,1.)).xyz;
- vec4 mvPosition=viewMatrix*vec4(wPos,1.); gl_Position=projectionMatrix*mvPosition;
- #include <fog_vertex>
-}`
-const waterFragment = `
-uniform float t;uniform float day;uniform vec3 waterTint;varying vec3 wPos;
-#include <fog_pars_fragment>
-float h(vec2 p){return fract(sin(dot(p,vec2(93.17,53.83)))*4327.643);}
-float n(vec2 p){vec2 f=fract(p),i=floor(p);f=f*f*(3.-2.*f);return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+1.),f.x),f.y);}
-void main(){
- vec2 p=wPos.xz;
- float crinkle=n(vec2(p.x*.74,p.y*1.82+t*.43))+n(vec2(p.x*.43+t*.17,p.y*.81-t*.15))*.5;
- float ripple=sin(p.y*2.2+p.x*.64+3.4*crinkle+t*1.5);
- vec3 viewDir=normalize(cameraPosition-wPos);
- float fres=pow(1.-abs(viewDir.y),3.);
- float glitter=pow(max(0.,ripple)*smoothstep(.56,1.08,crinkle),6.);
- vec3 c=mix(waterTint*(.66+.23*crinkle),vec3(.40,.59,.60),fres*.65)+glitter*.22;
- gl_FragColor=vec4(c*mix(.135,1.,day),1.);
- #include <tonemapping_fragment>
- #include <colorspace_fragment>
- #include <fog_fragment>
-}`
-function watercourse(id, group) {
-  const b = biomes[id],
-    p = [],
-    idx = [],
-    salt = id === 'salt',
-    start = salt ? -274 : -b.radius,
-    end = salt ? -54 : b.radius,
-    steps = salt ? 100 : 310
-  for (let i = 0; i <= steps; i++) {
-    const z = mix(start, end, i / steps),
-      cx = riverX(id, z),
-      w = riverWidth(id, z) * (salt ? 1.035 : 1.2)
-    p.push(cx - w, b.waterLevel, z, cx + w, b.waterLevel, z)
-    if (i) {
-      const a = (i - 1) * 2
-      idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3)
-    }
-  }
-  const g = new THREE.BufferGeometry()
-  g.setAttribute('position', new THREE.Float32BufferAttribute(p, 3))
-  g.setIndex(idx)
-  const uniforms = {
-    ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog),
-    day: { value: 1 },
-    t: { value: 0 },
-    waterTint: { value: new THREE.Color(b.water) },
-  }
-  group.add(
-    new THREE.Mesh(
-      g,
-      new THREE.ShaderMaterial({
-        uniforms,
-        vertexShader: waterVertex,
-        fragmentShader: waterFragment,
-        fog: true,
-        side: THREE.DoubleSide,
-      }),
-    ),
-  )
-  return uniforms
-}
 function instances(group, geometry, material, list) {
   if (!list.length) return null
   const mesh = new THREE.InstancedMesh(geometry, material, list.length),
@@ -382,6 +318,15 @@ function adornments(id, group, solids) {
     Math.hypot(x - wildX, z - wildZ) > 9 &&
     !onBorderRoad(id, x, z)
   function tree(x, z, index, s, a = rng() * 6.28) {
+    const bank = waterAt(id, x, z)
+    if (
+      bank.canCollect ||
+      (Math.abs(x - riverX(id, z)) < riverWidth(id, z) + 45 &&
+        Math.hypot(terrainY(x + 1, z) - terrainY(x - 1, z), terrainY(x, z + 1) - terrainY(x, z - 1)) >
+          1.6)
+    )
+      return
+
     if (s <= 0) return
     const key = index + '|' + Math.floor(x / 150) + '|' + Math.floor(z / 150)
     if (!buckets.has(key))
@@ -431,8 +376,11 @@ function adornments(id, group, solids) {
     }
     if (!open(x, z)) continue
     const y = terrainY(x, z),
-      watered = Math.abs(x - riverX(id, z)) < riverWidth(id, z) + 18
-    if (y < b.waterLevel + 1) continue
+      bank = waterAt(id, x, z),
+      watered =
+        bank.canCollect ||
+        (Math.abs(x - riverX(id, z)) < riverWidth(id, z) + 18 && Math.abs(y - bank.level) < 5)
+    if (bank.wet) continue
     const grow = noise(x / 42, z / 42, b.seed + 21)
     if (forest && grow < 0.24 && rng() < 0.74) continue
     if ((id === 'gorge' && (y < 1 || grow < 0.47)) || (id === 'salt' && grow < 0.43 && !watered))
@@ -457,7 +405,7 @@ function adornments(id, group, solids) {
     if (forest && i % 3 === 0 && grow > 0.45) {
       const rx = x + 6.5 + (rng() - 0.5) * 5,
         rz = z + 8 * (rng() - 0.5)
-      if (open(rx, rz) && terrainY(rx, rz) > b.waterLevel + 1)
+      if (open(rx, rz) && !waterAt(id, rx, rz).wet)
         tree(rx, rz, rng() < 0.48 ? 0 : 1, 0.61 + rng() * 0.45)
     }
   }
@@ -531,7 +479,7 @@ function adornments(id, group, solids) {
     for (let k = 0; k < 650; k++) {
       const x = (rng() - 0.5) * (k < 390 ? 470 : 1160),
         z = (k < 390 ? -104 : 0) + (rng() - 0.5) * (k < 390 ? 440 : 1170)
-      if (!open(x, z) || terrainY(x, z) < b.waterLevel + 0.6) continue
+      if (!open(x, z) || waterAt(id, x, z).wet) continue
       for (let j = 0; j < 4; j++) {
         const xx = x + (rng() - 0.5) * 7,
           zz = z + (rng() - 0.5) * 7
@@ -543,6 +491,11 @@ function adornments(id, group, solids) {
   }
   function stone(x, z, rx, h, rz, which, spire = false, solid = true, rotation = rng() * 6.28) {
     const center = terrainY(x, z)
+    if (
+      Math.abs(x - riverX(id, z)) < riverWidth(id, z) + 64 &&
+      Math.hypot(terrainY(x + 1, z) - terrainY(x - 1, z), terrainY(x, z + 1) - terrainY(x, z - 1)) > 1.74
+    )
+      return
     let y = center
     for (let j = 0; j < 6; j++) {
       const a = j * 1.0472
@@ -559,7 +512,7 @@ function adornments(id, group, solids) {
   for (let i = 0; i < (forest ? 650 : 1250); i++) {
     const x = (rng() - 0.5) * 1198,
       z = (rng() - 0.5) * 1198
-    if (!open(x, z) || terrainY(x, z) < b.waterLevel - 1) continue
+    if (!open(x, z) || waterAt(id, x, z).canCollect) continue
     const s = 0.45 + Math.pow(rng(), 3.9) * (forest ? 5.4 : 5.9)
     stone(
       x,
@@ -626,8 +579,7 @@ function adornments(id, group, solids) {
       x = (rng() - 0.5) * 1200
       z = (rng() - 0.5) * 1200
     }
-    if (Math.hypot(x, z) < 51 || trailDistance(id, x, z) < 2.7 || terrainY(x, z) < b.waterLevel + 0.4)
-      continue
+    if (Math.hypot(x, z) < 51 || trailDistance(id, x, z) < 2.7 || waterAt(id, x, z).wet) continue
     const s = 0.46 + rng() * (forest ? 1.15 : 1.07)
     grass[i % 2].push([x, terrainY(x, z) - 0.03, z, s, s, s, rng() * 6.28])
   }
@@ -834,74 +786,6 @@ function bakeShade(id, items, meshes) {
   return tex
 }
 
-function waterfall(id, group, solids) {
-  if (id !== 'rain') return null
-  const b = biomes[id],
-    z = b.landmark[1] - 23,
-    x = riverX(id, z),
-    y = b.waterLevel
-  const g = new Shape(),
-    pale = new THREE.Color('#afd7d4')
-  const r = random(201)
-  for (const [zz0, zz1, top, bottom, center, width] of [
-    [-14, -8, 25, 14, -1, 13],
-    [-7, -3, 14, 8, 0.8, 15],
-    [-2, 2, 8, 0, -0.4, 15],
-  ]) {
-    for (let l = 0; l < 24; l++) {
-      const offset = (l / 23 - 0.5) * width,
-        wide = 0.26 + r() * 0.27
-      const line = []
-      for (let k = 0; k <= 12; k++) {
-        const t = k / 12,
-          xx = x + center + offset + 0.3 * Math.sin(t * 4 + l),
-          yy = y + mix(top, bottom, t * t),
-          zz = z + mix(zz0, zz1, Math.sin(t * Math.PI * 0.5)) + 0.13 * Math.sin(l)
-        line.push([
-          g.vert(new THREE.Vector3(xx - wide, yy, zz), pale, 0, t),
-          g.vert(new THREE.Vector3(xx + wide, yy, zz), pale, 1, t),
-        ])
-        if (k) g.join(line[k - 1][0], line[k - 1][1], line[k][1], line[k][0])
-      }
-    }
-  }
-  const uniforms = {
-    ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog),
-    t: { value: 0 },
-    day: { value: 1 },
-  }
-  const mat = new THREE.ShaderMaterial({
-    uniforms,
-    fog: true,
-    side: THREE.DoubleSide,
-    transparent: true,
-    depthWrite: false,
-    vertexShader: waterVertex
-      .replace('varying vec3 wPos;', 'varying vec3 wPos;varying vec2 vUv;')
-      .replace('wPos=(modelMatrix', 'vUv=uv;wPos=(modelMatrix'),
-    fragmentShader: `varying vec3 wPos;varying vec2 vUv;uniform float t;uniform float day;
-    #include <fog_pars_fragment>
-    void main(){float s=.5+.5*sin(wPos.y*2.4+t*9.+sin(wPos.x*2.));float edge=sin(vUv.x*3.14159);gl_FragColor=vec4(vec3(.58,.81,.85)*(.84+.16*s)*mix(.18,1.,day),.33+.53*edge);
-    #include <colorspace_fragment>
-    #include <fog_fragment>
-    }`,
-  })
-  group.add(new THREE.Mesh(g.geometry(), mat))
-  // A projecting rock shelf physically connects the curtain to its upper source.
-  const geo = rockKit(id, 385, true),
-    stone = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide })
-  const shelves = [
-    [x, y - 0.8, z - 18, 12, 26, 5.5, 0],
-    [x + 1, y - 0.8, z - 11.4, 11.2, 15.6, 3.8, -0.05],
-    [x, y - 0.8, z - 5.3, 11.4, 9.1, 3.7, 0],
-    [x - 11.2, y - 0.8, z - 15, 6.1, 25, 7.4, -0.1],
-    [x + 12.4, y - 1, z - 18, 8.5, 24, 7.8, 0.1],
-  ]
-  instances(group, geo, stone, shelves)
-  for (const [cx, cy, cz, rx, h, rz] of shelves)
-    solids.push({ x: cx, z: cz, y: cy, h: h * 0.93, r: Math.min(rx, rz) * 0.91 })
-  return uniforms
-}
 function drift(id, group) {
   if (id !== 'root' && id !== 'rain') return null
   const near = biomes[id].landmark,
@@ -935,9 +819,8 @@ export function createLandscape(scene, id) {
   group.add(ground)
   horizon(id, group)
   const path = road(id, group)
-  const water = watercourse(id, group),
+  const water = createWater(group, id, ground, solids),
     trees = adornments(id, group, solids),
-    cascade = waterfall(id, group, solids),
     spores = drift(id, group)
   const shade = bakeShade(id, trees.shadows, [ground, path]),
     birds = flight(id, group)
@@ -946,6 +829,7 @@ export function createLandscape(scene, id) {
   return {
     ground,
     solids,
+    setWaterActor: water.setActor,
     update(dt, time, daylight, camera) {
       const pos = camera?.position || camera
       if (pos && Math.abs(pos.x - lx) + Math.abs(pos.z - lz) > 7) {
@@ -955,11 +839,7 @@ export function createLandscape(scene, id) {
       }
       trees.wind.value = time
       birds(time, daylight)
-      for (const shader of [water, cascade])
-        if (shader) {
-          shader.t.value = time
-          shader.day.value = daylight
-        }
+      water.update(time, daylight)
       if (spores) {
         spores.position.set(
           Math.sin(time * 0.09) * 0.8,

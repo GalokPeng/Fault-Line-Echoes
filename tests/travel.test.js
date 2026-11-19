@@ -3,6 +3,39 @@ import assert from 'node:assert/strict'
 import { biomes, heightAt } from '../src/biomes.js'
 import { gates, entryAt, nextGate, borderRoads, onBorderRoad } from '../src/borders.js'
 import { footfall, gripInReach, climbMotion } from '../src/movement.js'
+import { passageFor, crossedPassage } from '../src/passages.js'
+
+test('walk through either end of a city passage, including the edges, but stay on the wall walk', () => {
+  for (const dest of ['rain', 'salt', 'root', 'gorge']) {
+    for (const [here, there] of [
+      ['capital', dest],
+      [dest, 'capital'],
+    ]) {
+      const g = passageFor(
+        here,
+        gates(here).find((p) => p.to === there),
+      )
+      const at = (forward, side = 0, h = 0) => ({
+        x: g.x + forward * g.nx + side * g.nz,
+        y: g.y + h,
+        z: g.z + forward * g.nz - side * g.nx,
+      })
+      assert.equal(crossedPassage([g], at(-2, g.radius - 0.32), at(1, g.radius - 0.32)), g)
+      assert.equal(crossedPassage([g], at(1), at(-2)), null)
+      assert.equal(crossedPassage([g], at(-2), at(-0.1)), null)
+      assert.equal(crossedPassage([g], at(-2, 0, 12), at(1, 0, 12)), null)
+      assert.equal(crossedPassage([g], at(-2, g.radius + 1), at(1, g.radius + 1)), null)
+      assert.equal(crossedPassage([g], at(-2), at(0)), g)
+    }
+  }
+  assert.equal(
+    passageFor(
+      'root',
+      gates('root').find((p) => p.to === 'rain'),
+    ),
+    null,
+  )
+})
 
 test('four reciprocal capital gates and two distinct reciprocal wilderness passes', () => {
   assert.equal(Object.keys(biomes).length, 5)

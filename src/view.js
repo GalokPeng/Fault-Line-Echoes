@@ -1,5 +1,5 @@
 import * as T from 'three'
-import { biomes, heightAt, riverX, riverWidth } from './biomes.js'
+import { biomes, heightAt, waterAt } from './biomes.js'
 import { createLandscape } from './landscape.js'
 import { createSettlement } from './settlements.js'
 import { createActor } from './actors.js'
@@ -183,6 +183,7 @@ export function makeView(canvas, quality) {
       zoom = T.MathUtils.clamp(zoom + wheel * 0.0006, 0.45, 1.8)
     },
     preview(dt, free) {
+      land.setWaterActor?.(null)
       lantern.intensity = 0
       const vista = biomes[id].vista
       elapsed += dt
@@ -329,7 +330,7 @@ export function drawMap(canvas, id, p, places, goal, { local = false, yaw = 0, p
       ctx.fillStyle =
         Math.max(Math.abs(xx), Math.abs(zz)) > b.radius
           ? '#15231f'
-          : Math.abs(xx - riverX(id, zz)) < riverWidth(id, zz)
+          : waterAt(id, xx, zz).wet
             ? '#4b7978'
             : Math.floor(a / 8) !== Math.floor((a + l) / 8)
               ? '#8a8d6d'
@@ -395,6 +396,9 @@ export function drawMap(canvas, id, p, places, goal, { local = false, yaw = 0, p
     if (mark.boss) {
       dot(mark.x, mark.z, '#f99777', 4)
       label(mark.x, mark.z, mark.name, '#edb593')
+    } else if (mark.kind === 'shore') {
+      dot(mark.x, mark.z, '#81c7d5', 3.5)
+      if (local) label(mark.x, mark.z, mark.name, '#acdfe3')
     } else if (mark.kind === 'habitat') {
       dot(mark.x, mark.z, '#d0bf82', 3.5)
       if (local) label(mark.x, mark.z, mark.name, '#e5d49a')

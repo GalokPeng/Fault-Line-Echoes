@@ -19,8 +19,45 @@ import {
   TORCH_HOURS,
 } from '../src/expedition.js'
 import { wildlife } from '../src/perception-species.js'
+import { iconIds, iconSvg, itemIcon } from '../src/expedition-icons.js'
 
 const fresh = () => migrateExpedition({ items: [] })
+
+test('each inventory item has an independently drawn, embedded icon, source and use', () => {
+  const inventory = Object.keys(items)
+  assert.deepEqual(iconIds.toSorted(), inventory.toSorted())
+  assert.equal(new Set(iconIds.map(iconSvg)).size, inventory.length)
+  for (const id of inventory) {
+    assert.match(iconSvg(id), /<path /, id)
+    assert.match(itemIcon(id), /^data:image\/svg\+xml/, id)
+    assert.ok(items[id].source && items[id].purpose, id)
+  }
+  for (const slot of Object.keys(slots)) assert.ok(iconSvg(slot), slot)
+})
+
+test('capital apothecary sells a portable medicine that reduces actual pollution sickness', () => {
+  const p = fresh(),
+    pharmacy = { zone: 'capital', service: 'pharmacy', merchant: true }
+  const price = marketFor(pharmacy).stock.stomachTonic
+  assert.ok(price > 0)
+  p.currency = price * 2
+  assert.ok(!operate(p, 'buy', 'stomachTonic', { ...pharmacy, service: 'baker' }).ok)
+  assert.ok(operate(p, 'buy', 'stomachTonic', pharmacy).ok)
+  assert.ok(!operate(p, 'use', 'stomachTonic').ok)
+  assert.equal(p.items.stomachTonic, 1)
+  p.water = 60
+  operate(p, 'sourceDrink', null, { waterSource: 'tainted' })
+  assert.equal(p.sickness, 6)
+  assert.ok(operate(p, 'use', 'stomachTonic').ok)
+  assert.equal(p.sickness, 2)
+  const saved = migrateExpedition({ expedition: JSON.parse(JSON.stringify(p)) })
+  assert.equal(saved.sickness, 2)
+  assert.ok(operate(saved, 'buy', 'stomachTonic', pharmacy).ok)
+  assert.ok(operate(saved, 'use', 'stomachTonic').ok)
+  assert.equal(saved.sickness, 0)
+  assert.equal(saved.items.stomachTonic, undefined)
+  assert.equal(saved.currency, 0)
+})
 
 test('empty-handed arrival, five physical slots, durable ownership and deferred legacy rewards', () => {
   const save = { items: [], visited: ['root'] },

@@ -45,6 +45,12 @@ export function architect(scene) {
     }),
     metal: new T.MeshStandardMaterial({ vertexColors: true, metalness: 0.24, roughness: 0.62 }),
     lamp: new T.MeshStandardMaterial({ vertexColors: true, emissive: '#f9ac53', emissiveIntensity: 1 }),
+    ember: new T.MeshStandardMaterial({
+      vertexColors: true,
+      emissive: '#ff5c1e',
+      emissiveIntensity: 1.45,
+      roughness: 0.72,
+    }),
     window: new T.MeshStandardMaterial({
       vertexColors: true,
       roughness: 0.51,

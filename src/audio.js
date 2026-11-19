@@ -3,6 +3,8 @@ export function soundscape() {
     master,
     wind,
     windGain,
+    riverGain,
+    riverPan,
     filter,
     enabled = true,
     region = 'rain',
@@ -33,6 +35,14 @@ export function soundscape() {
         windGain = ctx.createGain()
         windGain.gain.value = 0.15
         wind.connect(filter).connect(windGain).connect(master)
+        const wash = ctx.createBiquadFilter()
+        wash.type = 'bandpass'
+        wash.frequency.value = 1050
+        wash.Q.value = 0.54
+        riverGain = ctx.createGain()
+        riverGain.gain.value = 0
+        riverPan = ctx.createStereoPanner()
+        wind.connect(wash).connect(riverGain).connect(riverPan).connect(master)
         wind.start()
       }
       if (ctx.state === 'suspended') ctx.resume().catch(() => {})
@@ -67,6 +77,7 @@ export function soundscape() {
     },
     setRegion(id) {
       region = id
+      if (riverGain) riverGain.gain.setTargetAtTime(0, ctx.currentTime, 0.1)
     },
     foot(event) {
       if (!ctx || !enabled || !event) return
@@ -78,7 +89,7 @@ export function soundscape() {
         sand: [72, 1080, 0.13],
       }
       const [root, cut, life] = profiles[event.surface] || profiles.leaves
-      note(root, root * 0.37, life, event.volume, 'triangle')
+      note(root, root * 0.37, life, event.volume, 'triangle', event.pan || 0)
       const s = ctx.createBufferSource(),
         filter = ctx.createBiquadFilter(),
         g = ctx.createGain()
@@ -88,17 +99,22 @@ export function soundscape() {
       filter.Q.value = 0.7
       g.gain.setValueAtTime(event.volume * 0.6, ctx.currentTime)
       g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + life)
-      s.connect(filter).connect(g).connect(master)
+      const stereo = ctx.createStereoPanner()
+      stereo.pan.value = event.pan || 0
+      s.connect(filter).connect(g).connect(stereo).connect(master)
       s.start()
       s.stop(ctx.currentTime + life)
       s.onended = () => {
         s.disconnect()
         filter.disconnect()
+        stereo.disconnect()
         g.disconnect()
       }
     },
-    tick(dt, moving, sprint, inside, day, quiet) {
+    tick(dt, inside, day, waterGain = 0, pan = 0) {
       if (!ctx || !enabled) return
+      riverGain.gain.setTargetAtTime(waterGain * (inside ? 0.15 : 1), ctx.currentTime, 0.21)
+      riverPan.pan.setTargetAtTime(pan, ctx.currentTime, 0.16)
       filter.frequency.setTargetAtTime(
         inside ? 360 : region === 'salt' ? 900 : 1500,
         ctx.currentTime,

@@ -1,4 +1,4 @@
-import { biomes, heightAt, riverX, riverWidth } from './biomes.js'
+import { biomes, heightAt, waterAt, riverX } from './biomes.js'
 import { makeView, drawMap } from './view.js'
 import { makePhysics } from './physics.js'
 import { makePeople } from './people.js'
@@ -30,6 +30,7 @@ import {
 import { openPack } from './expedition-ui.js'
 import { roomActivity, makePatrol } from './patrol.js'
 import { assetUrl } from './asset-url.js'
+import { crossedPassage } from './passages.js'
 
 const $ = (id) => document.getElementById(id),
   canvas = $('world'),
@@ -129,6 +130,7 @@ function save() {
 function dialog(title, name, content, closable = true) {
   panel = name
   keys.clear()
+  if (hero) hero.quiet = false
   stick.x = stick.z = 0
   jump = false
   queued = null
@@ -253,7 +255,7 @@ function options() {
       ),
       el(
         'p',
-        'F 格挡，Shift 疾跑，Caps Lock 切换无声脚步，Ctrl 蹲下。空格跳跃，面对可触及的树节或矮台按住空格攀爬。R 交互，Tab 地图，B 行囊，G 火把，T 手记。',
+        'F 格挡，Shift 疾跑，按住 Caps Lock 静步，松开恢复，Ctrl 蹲下。空格跳跃，面对可触及的树节或矮台按住空格攀爬。走入城门光幕自动过境。R 交互，Tab 地图，B 行囊，G 火把，T 手记。',
       ),
     )
     if (import.meta.env.PROD && !globalThis.faultlineAssets) {
@@ -532,8 +534,12 @@ function speak(a) {
     )
     const service = a.service || (a.job === '市集商贩' ? 'merchant' : 'resident')
     if (!a.guard && a.kind !== 'guard') {
-      const trading = ['baker', 'butcher', 'merchant', 'smith', 'outfitter', 'inn'].includes(service)
-      const kindness = trading || service === 'beggar' || service === 'resident' ? service : undefined
+      const trading = ['baker', 'butcher', 'merchant', 'smith', 'outfitter', 'inn', 'pharmacy'].includes(
+        service,
+      )
+      const kindness = ['baker', 'butcher', 'inn', 'beggar', 'resident'].includes(service)
+        ? service
+        : undefined
       const ctx = {
         zone: id,
         service,
@@ -663,9 +669,9 @@ function harvest(lot, notice = '') {
 function mapPanel(local = false) {
   if (!hero || online) return
   const places = worldFeatures().concat(
-    view.town.npcSpawns
-      .filter((n) => n.service)
-      .map((n) => ({ ...n, y: n.y ?? heightAt(id, n.x, n.z) })),
+    people.all
+      .filter((a) => a.service && a.f.hp > 0)
+      .map((a) => ({ ...a.pos, name: a.name, job: a.job, service: a.service, actorId: a.id })),
     people.all.filter((a) => a.boss).map((a) => ({ ...a.home, boss: true, name: a.name })),
   )
   dialog(biomes[id].name + ' · 地图', 'map', () => {
@@ -695,12 +701,24 @@ function mapPanel(local = false) {
                 'outfitter',
                 'beggar',
                 'baker',
+                'pharmacy',
               ].includes(p.service),
           )
-        : places.filter((p) => p.boss || p.kind === 'well' || p.kind === 'inn' || p.kind === 'habitat')),
+        : places.filter((p) => p.boss || ['well', 'inn', 'habitat', 'shore'].includes(p.kind))),
     ]
     for (const p of points) {
-      const title = p.to ? p.name + ' · ' + biomes[p.to].name : p.job || p.name
+      const shop = {
+        smith: '鸣铁铸坊',
+        baker: '包子铺',
+        pharmacy: '回春药铺',
+        outfitter: '练家衣坊',
+        butcher: '梁家肉铺',
+      }
+      const title = p.to
+        ? p.name + ' · ' + biomes[p.to].name
+        : shop[p.service]
+          ? shop[p.service] + ' · ' + p.name
+          : p.job || p.name
       add(
         btn(title, () => {
           pin = { ...p, name: title }
@@ -720,16 +738,16 @@ function mapPanel(local = false) {
   })
 }
 function riverSource() {
-  if (!hero || id === 'capital') return null
+  if (!hero) return null
   const p = hero.pos,
-    b = biomes[id],
-    width = riverWidth(id, p.z)
-  if (width < 1 || Math.abs(p.x - riverX(id, p.z)) > width + 2.2 || Math.abs(p.y - b.waterLevel) > 2.6)
-    return null
+    water = waterAt(id, p.x, p.z)
+  if (!water.canCollect || Math.abs(p.y - water.level) > 1.55) return null
+  if (water.kind === 'brine') return { ...p, kind: 'brine', name: '检查盐湖卤水' }
+  const polluted = id === 'gorge' && p.z > 0
   return {
     kind: 'water',
-    name: id === 'salt' || (id === 'gorge' && p.z > 0) ? '浑浊水源' : '河岸活水',
-    source: id === 'salt' || (id === 'gorge' && p.z > 0) ? 'tainted' : 'river',
+    name: polluted ? '浑浊水源' : '河岸活水',
+    source: polluted ? 'tainted' : 'river',
     ...p,
   }
 }
@@ -755,7 +773,11 @@ function candidates() {
   )
   for (const p of resources) {
     switch (p.kind) {
+      case 'brine':
+        addItem(p, p.name, () => msg('岸上凝着盐霜。饮水可到白盐城的石井补给。', 4))
+        break
       case 'border':
+        if (id === 'capital' || p.to === 'capital') break
         addItem(p, p.name + ' · 前往' + biomes[p.to].name, () => cross(p), 6.5)
         break
       case 'well':
@@ -830,7 +852,17 @@ function candidates() {
                     data.field.taken[p.id] = Math.floor(pack.elapsed / 24)
                     const seen = people.witnessTheft(p)
                     closeDialog()
-                    msg(res.message + (seen ? '　有人目击，城防警戒！' : '　四下无人留意。'))
+                    const report = people.report
+                    msg(
+                      res.message +
+                        (seen
+                          ? '　' +
+                            report.witness +
+                            '看见了！' +
+                            (report.guard ? report.guard + '正赶来。' : '摊边响起了呼喊。')
+                          : '　四下无人留意。'),
+                      4,
+                    )
                     save()
                   } else msg(res.message)
                 }),
@@ -908,7 +940,28 @@ function death(killer) {
   )
 }
 function events() {
+  function spatial(pos, reach) {
+    const x = pos.x - hero.pos.x,
+      z = pos.z - hero.pos.z,
+      d = length(pos, hero.pos)
+    if (d >= reach) return null
+    return {
+      gain: Math.min(1, 1.9 / (1 + d * 0.33)) * (1 - d / reach),
+      pan: (x * Math.cos(hero.yaw) - z * Math.sin(hero.yaw)) / Math.max(1, Math.hypot(x, z)),
+    }
+  }
   return {
+    hammer(pos) {
+      const s = spatial(pos, 34)
+      if (s) {
+        audio.note(1120, 760, 0.19, 0.25 * s.gain, 'triangle', s.pan)
+        audio.note(1680, 1310, 0.29, 0.095 * s.gain, 'sine', s.pan)
+      }
+    },
+    foot(pos) {
+      const s = spatial(pos, 12)
+      if (s) audio.foot({ surface: 'stone', volume: 0.11 * s.gain, pan: s.pan })
+    },
     hit(name, damage, crime) {
       audio.note(132, 43, 0.13, 0.25, 'triangle')
       msg(name + '　−' + damage + (crime ? '　城防警戒' : ''), 1.6)
@@ -934,6 +987,9 @@ function events() {
     },
     warning(name) {
       msg(name, 1.25)
+    },
+    alarm() {
+      audio.note(480, 335, 0.28, 0.21, 'triangle')
     },
     loot(item, qty, name, pos) {
       addRemains(item, qty, name, pos || hero.pos)
@@ -974,7 +1030,7 @@ async function enter(link = null, crossing = null) {
       view.land.solids,
       [...view.town.colliders, ...(field?.structures || [])],
       p,
-      b.radius,
+      id === 'capital' ? 220.3 : b.radius,
     )
     if (n !== requestId) {
       physics.dispose()
@@ -1045,8 +1101,9 @@ async function enter(link = null, crossing = null) {
     loading(false)
   }
 }
-async function cross(g) {
-  if (entering || online || mode !== 'play' || length(hero.pos, g) > 6.55) return
+async function cross(g, throughGate = false) {
+  if (entering || online || mode !== 'play' || (!throughGate && length(hero.pos, g) > 6.55)) return
+  if (throughGate) audio.note(280, 510, 0.42, 0.12, 'sine')
   save()
   duelQuest = null
   await enter(null, { from: id, to: g.to })
@@ -1132,6 +1189,7 @@ function update(dt) {
   }
   const forward = active ? Number(keys.has('KeyW')) - Number(keys.has('KeyS')) + stick.z : 0,
     right = active ? Number(keys.has('KeyD')) - Number(keys.has('KeyA')) + stick.x : 0
+  hero.quiet = active && keys.has('CapsLock')
   f.guard = active && keys.has('KeyF') && f.busy <= 0
   hero.crouch = physics.crouch(
     active && (hero.crouchLatched || keys.has('ControlLeft') || keys.has('ControlRight')),
@@ -1181,9 +1239,16 @@ function update(dt) {
       f.stamina - (dt * (pack.equipped.body === 'harness' ? 21 : 26)) / stats.stamina,
     )
   }
-  const b = biomes[id],
-    p = hero.pos,
-    swimming = Math.abs(p.x - riverX(id, p.z)) < riverWidth(id, p.z) && p.y < b.waterLevel - 0.22
+  const p = hero.pos,
+    water = waterAt(id, p.x, p.z),
+    immersion = water.wet ? Math.max(0, water.level - p.y) : 0,
+    swimming = immersion > (hero.swimming ? 0.38 : 0.58) && water.depth > 0.65,
+    wading = immersion > 0.06
+  if (wading && !climbing) {
+    const carry = Math.min(1, immersion / 1.02) * (swimming ? 1 : 0.45)
+    dx = dx * (swimming ? 0.74 : 1 - carry * 0.34) + carry * water.speed * water.flowX
+    dz = dz * (swimming ? 0.74 : 1 - carry * 0.34) + carry * water.speed * water.flowZ
+  }
   const jumped = jump && !climbing && physics.grounded && f.stamina >= 7
   if (jumped) f.stamina -= 7
   hero.pos = physics.move(
@@ -1192,12 +1257,22 @@ function update(dt) {
     dt,
     jumped,
     climbing?.vy ?? false,
-    swimming ? b.waterLevel : null,
+    swimming ? water.level : null,
   )
+  if (!online && active) {
+    const gate = crossedPassage(field.portals, p, hero.pos)
+    if (gate) {
+      void cross(gate, true)
+      return
+    }
+  }
   hero.swimming = swimming
+  hero.wading = wading
+  hero.immersion = immersion
+  hero.waterVelocity = { x: (hero.pos.x - p.x) / dt, z: (hero.pos.z - p.z) / dt }
   hero.sprint = sprint
   const inTown = id === 'capital' || Math.hypot(p.x, p.z) < 54
-  const surface = swimming
+  const surface = wading
     ? 'water'
     : id === 'capital'
       ? 'stone'
@@ -1212,7 +1287,7 @@ function update(dt) {
               : 'leaves'
   const step = footfall(
     hero,
-    Math.hypot(hero.pos.x - p.x, hero.pos.z - p.z),
+    moving ? Math.hypot(hero.pos.x - p.x, hero.pos.z - p.z) : 0,
     surface,
     physics.grounded || swimming,
   )
@@ -1314,8 +1389,10 @@ function ui() {
       : b.name
   $('weather').textContent = online
     ? '房间对战'
-    : hero.swimming
-      ? '河道涉渡'
+    : hero.swimming || hero.wading
+      ? hero.swimming
+        ? '河道泅渡'
+        : '浅水涉行'
       : underground
         ? '地下库窟'
         : upper
@@ -1358,6 +1435,10 @@ function ui() {
   }
   const goal = activeGoal(),
     currentTask = current(data)
+  if (pin?.actorId) {
+    const actor = people.all.find((a) => a.id === pin.actorId)
+    if (actor) Object.assign(pin, actor.pos)
+  }
   if (people.training)
     tr.append(
       el('b', '人机切磋'),
@@ -1390,6 +1471,14 @@ function ui() {
         '标记 · ' + pin.name + '　' + Math.round(length(p, pin)) + 'm ' + pointDirection(p, pin),
       ),
     )
+  const report = people.report
+  if (report)
+    tr.append(
+      el(
+        'div',
+        '城防警戒 · ' + report.witness + '发现取物' + (report.guard ? '，' + report.guard + '接警' : ''),
+      ),
+    )
   if (patrol)
     tr.append(
       el(
@@ -1401,11 +1490,16 @@ function ui() {
     )
   const list = candidates(),
     focus = people.all.find((a) => a.f.hp > 0 && a.angry && length(a.pos, p) < 25)
+  const threshold = field?.portals.find(
+    (g) => Math.hypot(p.x - g.x, p.z - g.z) < 15 && Math.abs(p.y - g.y) < 5,
+  )
   $('prompt').textContent = list.length
     ? 'R　' + list[0].title + (list.length > 1 ? '　＋' + (list.length - 1) : '')
-    : focus
-      ? focus.name + '　' + Math.ceil(focus.f.hp) + ' HP'
-      : ''
+    : threshold
+      ? '穿越光幕 · ' + biomes[threshold.to].name
+      : focus
+        ? focus.name + '　' + Math.ceil(focus.f.hp) + ' HP'
+        : ''
   field?.object(goal)
 }
 function pointDirection(a, b) {
@@ -1421,11 +1515,12 @@ function frame(ts) {
   if (mode === 'play' && hero) {
     if (!panel || online) {
       acc = Math.min(0.15, acc + dt)
-      while (acc >= 1 / 60) {
+      while (acc >= 1 / 60 && mode === 'play') {
         if (!panel || online) update(1 / 60)
         acc -= 1 / 60
       }
     }
+    if (mode !== 'play') return
     view.player(
       hero.pos,
       hero.yaw,
@@ -1439,18 +1534,31 @@ function frame(ts) {
       !online && pack.torchLit,
       online ? null : pack.equipped.weapon,
     )
+    view.land.setWaterActor?.(
+      !online && !panel && hero.wading ? hero.pos : null,
+      hero.waterVelocity,
+      Math.min(1, (hero.immersion || 0) / 0.6),
+    )
     const day = view.render(dt, online ? 10 : data.hour, time)
     field?.update(dt, time, day, view.camera)
     patrol?.update(dt)
     if (hero.captionTTL > 0 && (hero.captionTTL -= dt) <= 0) $('caption').textContent = ''
     if (!panel) {
+      const px = hero.pos.x,
+        pz = hero.pos.z,
+        cx = riverX(id, pz),
+        bankSound = Math.abs(cx - px) < 54 && id !== 'salt' ? waterAt(id, cx, pz) : null
+      const distance = bankSound ? Math.hypot(px - cx, hero.pos.y - bankSound.level) : Infinity
+      const waterGain = bankSound?.wet
+        ? Math.max(0, 1 - distance / 54) *
+          (0.09 + Math.min(1, bankSound.speed / 3) * 0.19 + bankSound.foam * 0.18)
+        : 0
       audio.tick(
         dt,
-        hero.moving,
-        hero.sprint,
         hero.pos.y < biomes[id].level - 2 && Math.hypot(hero.pos.x, hero.pos.z) < 48,
         day,
-        hero.crouch || data.items.includes('软底护套'),
+        waterGain,
+        Math.max(-1, Math.min(1, (cx - px) / Math.max(4, distance))) * Math.cos(hero.yaw),
       )
     }
     if ((uiTimer -= dt) < 0) {
@@ -1562,7 +1670,6 @@ $('touchActions').onpointerdown = (e) => {
     if (key === 'Space') jump = true
   } else if (cmd === 'interact') interact()
   else if (cmd === 'pause') pause()
-  else if (cmd === 'quiet') hero.quiet = !hero.quiet
   else if (cmd === 'crouch') hero.crouchLatched = !hero.crouchLatched
   else action(cmd)
 }
@@ -1601,12 +1708,11 @@ document.addEventListener('keydown', (e) => {
   if (['Space', 'Tab', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.code))
     e.preventDefault()
   keys.add(e.code)
-  if (e.repeat) return
   if (e.code === 'CapsLock') {
     e.preventDefault()
-    hero.quiet = !hero.quiet
-    msg(hero.quiet ? '静步 · 无声' : '恢复正常步态', 1.2)
+    hero.quiet = true
   }
+  if (e.repeat) return
   if (e.code.startsWith('Control')) {
     e.preventDefault()
     hero.ctrlStart = performance.now()
@@ -1625,6 +1731,7 @@ document.addEventListener('keydown', (e) => {
 })
 document.addEventListener('keyup', (e) => {
   keys.delete(e.code)
+  if (hero && e.code === 'CapsLock') hero.quiet = false
   if (hero && mode === 'play' && !panel && e.code.startsWith('Control') && hero.ctrlStart) {
     if (performance.now() - hero.ctrlStart < 205) hero.crouchLatched = !hero.crouchLatched
     hero.ctrlStart = 0
@@ -1632,6 +1739,7 @@ document.addEventListener('keyup', (e) => {
 })
 window.addEventListener('blur', () => {
   keys.clear()
+  if (hero) hero.quiet = false
   dragging = false
   if (mode === 'play' && !panel && !online && !patrol) pause()
 })

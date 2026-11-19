@@ -1,10 +1,11 @@
-import { biomes, heightAt } from './biomes.js'
+import { biomes, heightAt, waterAt } from './biomes.js'
 import { fighter, hurt, recover, rewardHit, length, sight, heading } from './combat.js'
 import { raised, flatDistance, sees, hears, swivel } from './perception.js'
 import { wildlife, emptyHand, guardPalm, practiceWave } from './perception-species.js'
 import { encounters } from './perception-encounters.js'
 import { borderRoads } from './borders.js'
 import { harvestBySpecies } from './expedition-harvest.js'
+import { cityWalker, streetRoutine } from './city-life.js'
 
 const voices = {
   capital: ['北门的四盏行灯，分别照向四条去处。', '夜市打烊后，守夜的人会继续巡街。'],
@@ -29,7 +30,13 @@ export function makePeople(view, id, physics, hero, events) {
     night = false
   const h = (x, z) => heightAt(id, x, z)
   const isWild = id !== 'capital' && wildlife[id]
+  const routes = id === 'capital' ? cityWalker(view.town.colliders, view.land.solids) : null
+  let report = null
   const combat = encounters(view, physics, hero, events, h, all, impact)
+  function hammerImpact(p) {
+    view.town.workImpact?.(p)
+    events.hammer?.(p)
+  }
   function materialize(a) {
     if (!a.model) a.model = view.actor(a.kind, id, a.species || undefined)
     const g = a.model.group
@@ -87,10 +94,9 @@ export function makePeople(view, id, physics, hero, events) {
   for (const p of view.town.npcSpawns) {
     const a = add(p.guard ? 'guard' : 'resident', p.name, p.x, p.z, p.guard ? 'stone' : 'leaf', p)
     // Facing the active street makes a stationary vendor a real witness.
-    if (p.yaw == null) {
-      const goods = view.town.features?.find((f) => f.kind === 'owned' && f.owner === p.id)
-      a.yaw = goods ? Math.atan2(goods.x - p.x, goods.z - p.z) : Math.atan2(-p.x, -p.z)
-    }
+    a.goods = view.town.features?.find((f) => f.kind === 'owned' && f.owner === p.id)
+    if (p.yaw == null)
+      a.yaw = a.goods ? Math.atan2(a.goods.x - p.x, a.goods.z - p.z) : Math.atan2(-p.x, -p.z)
   }
   function safeNest(x, z, boss = false) {
     for (let k = 0; k < 35; k++) {
@@ -99,7 +105,7 @@ export function makePeople(view, id, physics, hero, events) {
         xx = x + Math.cos(a) * r,
         zz = z + Math.sin(a) * r,
         y = h(xx, zz)
-      if (y < b.waterLevel + 0.65) continue
+      if (waterAt(id, xx, zz).canCollect) continue
       const slope = Math.hypot(h(xx + 1, zz) - y, h(xx, zz + 1) - y)
       if (slope > (boss ? 0.46 : 0.72)) continue
       if (
@@ -184,6 +190,12 @@ export function makePeople(view, id, physics, hero, events) {
     return sees(a, point, physics.clear, sightOf(a, night, hero.crouch))
   }
   function remember(a, point, visual) {
+    if (id === 'capital' && !a.angry && a.kind !== 'duelist') {
+      a.post = { ...a.pos }
+      a.routine = null
+      a.working = null
+      a.model?.setWork?.(null)
+    }
     a.lastKnown = { ...point }
     if (visual) a.lastSeen = { ...point }
     a.searchTime = visual ? 7.2 : 5.3
@@ -301,7 +313,7 @@ export function makePeople(view, id, physics, hero, events) {
       dz = target.z - p.z,
       dist = Math.hypot(dx, dz)
     a.walking = false
-    if (dist < 0.38) return
+    if (dist < (id === 'capital' && a.state === 'idle' ? 0.06 : 0.38)) return
     const step = Math.min(dist, dt * speed),
       angle = Math.atan2(dx, dz),
       side = a.index % 2 ? 1 : -1
@@ -328,16 +340,24 @@ export function makePeople(view, id, physics, hero, events) {
           : y
       if (
         Math.abs(floor - p.y) > 0.57 + step * 0.9 ||
+        (a.species && a.species.form !== 'drake' && waterAt(id, x, z).depth > 0.62) ||
         !physics.clear(raised(p, 0.83), { x: x + sn * 0.43, y: floor + 0.83, z: z + cs * 0.43 })
       )
         continue
       p.x = x
       p.y = floor
       p.z = z
+      if (routes && flatDistance(p, hero.pos) < 12) {
+        a.stride = (a.stride || 0) + step
+        if (a.stride >= 1.48) {
+          a.stride -= 1.48
+          events.foot?.(p)
+        }
+      }
       a.yaw = swivel(a.yaw, yaw, dt * 6.5)
       a.walking = true
       if (record && a.state !== 'idle') {
-        const last = a.trace.at(-1) || a.home
+        const last = a.trace.at(-1) || a.post || a.home
         if (flatDistance(p, last) > 1.45) a.trace.push({ ...p })
         if (a.trace.length > 100) a.trace.shift()
       }
@@ -357,7 +377,8 @@ export function makePeople(view, id, physics, hero, events) {
   }
   function home(a) {
     a.corpse = 0
-    Object.assign(a.pos, a.home)
+    Object.assign(a.pos, a.post || a.home)
+    a.post = null
     a.state = 'idle'
     a.angry = false
     a.canSee = false
@@ -371,8 +392,9 @@ export function makePeople(view, id, physics, hero, events) {
   }
   function goHome(a, dt, dist) {
     a.returnTime += dt
+    const origin = a.post || a.home
     if (
-      flatDistance(a.pos, a.home) < 0.8 ||
+      flatDistance(a.pos, origin) < 0.8 ||
       (dist > 95 && a.returnTime > 2.8) ||
       a.returnTime > 12 + a.leash / 3
     ) {
@@ -387,9 +409,13 @@ export function makePeople(view, id, physics, hero, events) {
       a.trace.pop()
       back = a.trace.at(-1)
     }
-    walk(a, back || a.home, 4.3, dt, false)
+    walk(a, back || origin, 4.3, dt, false)
   }
   function patrol(a, dt) {
+    if (routes && a.kind !== 'duelist') {
+      streetRoutine(a, dt, night, routes, walk, a.goods)
+      return
+    }
     if (a.service && a.kind !== 'guard') {
       a.walking = false
       if (flatDistance(a.pos, a.home) > 0.85) walk(a, a.home, 1.25, dt, false)
@@ -456,7 +482,16 @@ export function makePeople(view, id, physics, hero, events) {
       const dist = length(a.pos, hero.pos),
         active = dist < 125
       if (a.model) a.model.group.visible = active
-      if (!active && a.state === 'idle') continue
+      if (!active && a.state === 'idle') {
+        if (routes) {
+          a.awayTime = (a.awayTime || 0) + dt
+          if (a.awayTime > 0.32) {
+            patrol(a, a.awayTime)
+            a.awayTime = 0
+          }
+        }
+        continue
+      }
       if (active) {
         materialize(a)
         a.model.group.visible = true
@@ -465,12 +500,13 @@ export function makePeople(view, id, physics, hero, events) {
       a.cooldown = Math.max(0, a.cooldown - dt)
       a.swing = Math.max(0, a.swing - dt)
       const sanctuary = a.species && Math.hypot(hero.pos.x, hero.pos.z) < 43
+      const origin = a.post || a.home
       if (
         a.angry &&
         (hero.f.hp <= 0 ||
           sanctuary ||
-          flatDistance(hero.pos, a.home) > a.leash ||
-          flatDistance(a.pos, a.home) > a.leash + 1)
+          flatDistance(hero.pos, origin) > a.leash ||
+          flatDistance(a.pos, origin) > a.leash + 1)
       )
         retreat(a)
       if (a.state === 'return') goHome(a, dt, dist)
@@ -480,7 +516,7 @@ export function makePeople(view, id, physics, hero, events) {
         const canEngage =
           !sanctuary &&
           (a.angry || a.kind === 'beast') &&
-          flatDistance(hero.pos, a.home) <= a.leash &&
+          flatDistance(hero.pos, origin) <= a.leash &&
           hero.f.hp > 0
         if (canEngage && a.visionIn <= 0) {
           a.visionIn = 0.095 + 0.009 * (a.index % 4)
@@ -512,6 +548,7 @@ export function makePeople(view, id, physics, hero, events) {
         const g = a.model.group
         g.position.set(a.pos.x, a.pos.y, a.pos.z)
         g.rotation.y = a.yaw
+        a.model.setWork?.(a.state === 'idle' && !a.walking ? a.working : null, hammerImpact)
         a.model.update(
           dt,
           a.walking,
@@ -540,6 +577,9 @@ export function makePeople(view, id, physics, hero, events) {
     get training() {
       return training
     },
+    get report() {
+      return report && time - report.at < 9 ? report : null
+    },
     nearby() {
       return all
         .filter(
@@ -563,10 +603,30 @@ export function makePeople(view, id, physics, hero, events) {
           ['resident', 'guard'].includes(a.kind) &&
           a.f.hp > 0 &&
           sightNow(a) &&
-          sees(a, pos, physics.clear, { ...sightOf(a, night), targetEye: 0.75 }),
+          sees(a, pos, physics.clear, { ...sightOf(a, night), targetEye: pos.displayHeight ?? 1.22 }),
       )
-      for (const a of witnesses) remember(a, hero.pos, true)
-      return witnesses.length > 0
+      if (!witnesses.length) return false
+      const owner = witnesses.find((a) => a.id === pos.owner),
+        caller = owner || witnesses[0]
+      if (owner) remember(owner, hero.pos, true)
+      const guards = all
+        .filter(
+          (g) =>
+            g.kind === 'guard' &&
+            g.f.hp > 0 &&
+            (witnesses.includes(g) ||
+              witnesses.some((w) => {
+                const d = flatDistance(g.pos, w.pos)
+                return d < 52 && (d < 16 || physics.clear(raised(g.pos, 1.52), raised(w.pos, 1.52)))
+              })),
+        )
+        .sort((a, b) => flatDistance(a.pos, pos) - flatDistance(b.pos, pos))
+        .slice(0, 3)
+      for (const guard of guards) remember(guard, pos, witnesses.includes(guard) || sightNow(guard))
+      if (!owner && !pos.owner && caller.kind !== 'guard') remember(caller, hero.pos, true)
+      report = { witness: caller.name, guard: guards[0]?.name, at: time }
+      events.alarm?.(report)
+      return true
     },
     startDuel(role, name) {
       endDuel()

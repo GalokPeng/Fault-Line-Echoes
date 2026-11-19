@@ -55,8 +55,10 @@ export function streamTerrain(source) {
   }
   for (let z = 0; z < quads; z += tile)
     for (let x = 0; x < quads; x += tile) {
-      const low = patch(x, z, tile % 4 === 0 ? 4 : 1)
-      chunks.push({ x, z, low, hi: null, sphere: low.geometry.boundingSphere })
+      // The far bank must still meet the water at its physical elevation.
+      const precise = !!source.userData.wetTiles?.[(z / tile) * 16 + x / tile]
+      const low = patch(x, z, precise || tile % 4 !== 0 ? 1 : 4)
+      chunks.push({ x, z, low, precise, hi: null, sphere: low.geometry.boundingSphere })
     }
   const f = new T.Frustum(),
     matrix = new T.Matrix4(),
@@ -83,7 +85,7 @@ export function streamTerrain(source) {
       let newTiles = 0
       for (const c of chunks) {
         const d = c.sphere.center.distanceTo(camera.position) - c.sphere.radius
-        const near = d < (quality === 'low' ? 105 : 178),
+        const near = !c.precise && d < (quality === 'low' ? 105 : 178),
           visible = f.intersectsSphere(c.sphere)
         if (visible && near && !c.hi && newTiles < 5) {
           c.hi = patch(c.x, c.z, 1)

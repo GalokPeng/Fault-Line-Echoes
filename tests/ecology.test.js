@@ -153,6 +153,36 @@ test('a duel also ends on its leash instead of pursuing across a continent', () 
   assert.deepEqual(log.duel, [false])
   people.dispose()
 })
+test('a stallholder reports a witnessed theft to a guard in earshot, who can approach and hurt the thief', () => {
+  const at = (id, x, z, guard = false) => ({
+    id,
+    name: id,
+    x,
+    z,
+    y: 24,
+    guard,
+    service: guard ? 'guard' : 'baker',
+    yaw: 0,
+  })
+  const goods = { id: 'stock', owner: 'shop', kind: 'owned', ...position(0, 2, 24) }
+  const { hero, people, log } = situation(
+    'capital',
+    clear,
+    [at('shop', 0, 0), at('local-watch', 4, 4, true), at('far-watch', 90, 0, true)],
+    [goods],
+  )
+  hero.pos = position(0, 2.5, 24)
+  assert.ok(people.witnessTheft(goods))
+  assert.equal(people.report.guard, 'local-watch')
+  assert.equal(people.all[1].angry, true)
+  assert.equal(people.all[2].angry, false)
+  tick(people, 4)
+  assert.ok(log.injuries.some(([, a]) => a.name === 'local-watch'))
+  hero.pos = position(105, 2.5, 24)
+  tick(people, 6)
+  assert.equal(people.all[1].angry, false)
+  people.dispose()
+})
 test('three wave bolts take time, can miss a sidestep, stop at cover and hit one target once', () => {
   const spec = cast(fighter('tide'), 'e'),
     actor = {}

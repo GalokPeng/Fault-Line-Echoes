@@ -1,7 +1,8 @@
 import * as T from 'three'
-import { biomes, heightAt } from './biomes.js'
+import { biomes, heightAt, waterSurfaceData } from './biomes.js'
 import { gates, borderRoads } from './borders.js'
 import { createActor } from './actors.js'
+import { passageFor, passageVeils } from './passages.js'
 
 export function windLull(time) {
   return time % 24 >= 14
@@ -36,14 +37,44 @@ const labels = {
 export function objectName(task) {
   return labels[task?.q.id]?.[task.index] || task?.step.label || ''
 }
+const shoreLandmarks = {
+  rain: [
+    ['浅汊渡口', 12, 530],
+    ['三叠跌水', 0, -282],
+  ],
+  salt: [['旧盐池', 18, -164]],
+  root: [['根湾渡口', -20, 510]],
+  gorge: [['断潮河滩', 35, 500]],
+}
+function markedBanks(id) {
+  const sections = shoreLandmarks[id]
+  if (!sections) return []
+  const shores = waterSurfaceData(id).shorelines
+  return sections.flatMap(([name, approachX, atZ]) => {
+    let best = Infinity,
+      point
+    for (const [p, q] of shores) {
+      const x = (p.x + q.x) / 2,
+        z = (p.z + q.z) / 2
+      const score = Math.abs(atZ - z) * 2 + Math.abs(approachX - x) * 0.12
+      if (score < best) {
+        best = score
+        point = { kind: 'shore', name, x, z, y: (p.y + q.y) / 2 }
+      }
+    }
+    return point ? [point] : []
+  })
+}
 export function makeField(scene, id, town, data) {
   const b = biomes[id],
     group = new T.Group(),
     structures = [],
-    features = [...gates(id)],
+    features = [...gates(id), ...markedBanks(id)],
     lights = [],
     models = []
   scene.add(group)
+  const portals = features.map((g) => passageFor(id, g)).filter(Boolean)
+  const veils = passageVeils(group, portals)
   const materials = new Map(),
     maps = [],
     geos = new Set()
@@ -391,6 +422,7 @@ export function makeField(scene, id, town, data) {
     : null
   return {
     features,
+    portals,
     structures,
     refresh,
     object,
@@ -399,6 +431,7 @@ export function makeField(scene, id, town, data) {
     },
     drops: showDrops,
     update(dt, t, day, cam) {
+      veils.update(t)
       if (windBand)
         windBand.rotation.z = T.MathUtils.damp(
           windBand.rotation.z,
@@ -428,6 +461,7 @@ export function makeField(scene, id, town, data) {
       apprentice?.update(dt, false, false, t)
     },
     dispose() {
+      veils.dispose()
       models.forEach((a) => a.dispose())
       group.removeFromParent()
       geos.forEach((g) => g.dispose())

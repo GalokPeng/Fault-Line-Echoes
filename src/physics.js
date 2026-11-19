@@ -61,8 +61,6 @@ export async function makePhysics(ground, cylinders, boxes, spawn, radius) {
     if (waterLevel !== null && p.y < waterLevel + 0.38) {
       const target = waterLevel + 0.06 + (jump ? 0.44 : 0)
       vy = Math.min(3.8, Math.max(-2.2, (target - p.y) * 4))
-      dx *= 0.62
-      dz *= 0.62
     }
     const bound = (n) => Math.max(-radius + 2, Math.min(radius - 2, n))
     controller.computeColliderMovement(capsule, {

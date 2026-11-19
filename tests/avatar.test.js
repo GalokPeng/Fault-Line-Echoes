@@ -168,5 +168,14 @@ test('host validates empty-handed ranged attacks, sends their role/key and keeps
   for (let i = 0; i < 45; i++) game.update(1 / 60)
   assert.equal(snap().players[0].hp, 90)
   assert.ok(packets.some((m) => m.type === 'wave' && m.i === 1 && m.key === 'light'))
+  const hits = packets.filter((m) => m.type === 'impact')
+  assert.deepEqual(
+    hits.map((m) => [m.i, m.key, m.blocked]),
+    [
+      [0, 'light', false],
+      [1, 'light', false],
+    ],
+  )
+  assert.ok(hits.every((m) => [m.point.x, m.point.y, m.point.z].every(Number.isFinite)))
   game.close()
 })

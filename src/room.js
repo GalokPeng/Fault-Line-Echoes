@@ -86,6 +86,11 @@ export function match(link, hero, view, physics, onEvent) {
   const waves = [],
     display = flightDisplay(view.scene)
   let volleyId = 0
+  const isPoint = (p) => p && [p.x, p.y, p.z].every(Number.isFinite)
+  function hitEffect(i, spec, point, blocked) {
+    view.impactEffect?.(spec, point, blocked)
+    link.send({ type: 'impact', i, key: spec.key, point, blocked })
+  }
   function clearWaves() {
     waves.length = 0
     display.clear()
@@ -111,12 +116,11 @@ export function match(link, hero, view, physics, onEvent) {
       if (target) {
         const front = heading(own ? remoteYaw : hero.yaw),
           v = defender.pos
-        const dmg = hurt(
-          defender.f,
-          p.spec.dmg,
-          front.x * (p.origin.x - v.x) + front.z * (p.origin.z - v.z) > 0,
-        )
+        const frontal = front.x * (p.origin.x - v.x) + front.z * (p.origin.z - v.z) > 0
+        const blocked = frontal && (defender.f.guard || defender.f.parry > 0) && defender.f.stamina >= 8
+        const dmg = hurt(defender.f, p.spec.dmg, frontal)
         defender.f.hp = Math.max(0, defender.f.hp - dmg)
+        hitEffect(p.i, p.spec, p.pos, blocked)
         rewardHit(attacker.f, p.spec, p.traveled)
       }
       display.sync(p)
@@ -132,6 +136,7 @@ export function match(link, hero, view, physics, onEvent) {
   }
   function reset() {
     clearWaves()
+    view.clearEffects?.()
     hero.f = fighter(hero.f.role)
     if (foe) foe.f = fighter(foe.f.role)
     const p = spawn(localIndex)
@@ -170,13 +175,14 @@ export function match(link, hero, view, physics, onEvent) {
         y: attacker.pos.y + (attacker.crouch ? 1.08 : 1.64),
       },
       to = { ...defender.pos, y: defender.pos.y + (defender.crouch ? 0.74 : 1.12) }
+    view.castEffect?.(spec, from, dir, attacker.pos.y)
     if (spec.flight) {
       const id = ++volleyId
       emitWave(id, i, from, dir, spec)
       link.send({ type: 'wave', id, i, key, from, dir })
       return
     }
-    link.send({ type: 'stroke', i, key })
+    link.send({ type: 'stroke', i, key, from, dir })
     const range = spec.shot || spec.dist,
       hit = sight(from, dir, to, range, spec.shot ? 0.87 : 1.15)
     if (spec.shot)
@@ -189,12 +195,11 @@ export function match(link, hero, view, physics, onEvent) {
     if (Number.isFinite(hit) && physics.clear(from, to)) {
       const front = heading(own ? remoteYaw : hero.yaw),
         v = defender.pos
-      const damage = hurt(
-        defender.f,
-        spec.dmg * (spec.burst || 1),
-        front.x * (attacker.pos.x - v.x) + front.z * (attacker.pos.z - v.z) > 0,
-      )
+      const frontal = front.x * (attacker.pos.x - v.x) + front.z * (attacker.pos.z - v.z) > 0
+      const blocked = frontal && (defender.f.guard || defender.f.parry > 0) && defender.f.stamina >= 8
+      const damage = hurt(defender.f, spec.dmg * (spec.burst || 1), frontal)
       defender.f.hp = Math.max(0, defender.f.hp - damage)
+      hitEffect(i, spec, to, blocked)
       rewardHit(attacker.f, spec, hit)
       if (!defender.f.hp) finish(i)
     }
@@ -227,6 +232,7 @@ export function match(link, hero, view, physics, onEvent) {
       if (!spec?.flight) return
       if (own) view.punch(spec)
       else remoteModel.perform?.(spec.key)
+      view.castEffect?.(spec, m.from, m.dir, (m.i === localIndex ? hero : foe).pos.y)
       emitWave(m.id, m.i, m.from, m.dir, spec)
     }
     if (
@@ -236,9 +242,25 @@ export function match(link, hero, view, physics, onEvent) {
       [0, 1].includes(m.i) &&
       actionKeys.includes(m.key)
     ) {
-      if (m.i === localIndex) view.punch(attackStyle(hero.f.role, m.key))
+      const spec = attackStyle(m.i === localIndex ? hero.f.role : foe.f.role, m.key)
+      if (isPoint(m.from) && isPoint(m.dir))
+        view.castEffect?.(spec, m.from, m.dir, (m.i === localIndex ? hero : foe).pos.y)
+      if (m.i === localIndex) view.punch(spec)
       else remoteModel.perform?.(m.key)
     }
+    if (
+      !link.host &&
+      phase === 'fight' &&
+      m.type === 'impact' &&
+      [0, 1].includes(m.i) &&
+      actionKeys.includes(m.key) &&
+      isPoint(m.point)
+    )
+      view.impactEffect?.(
+        attackStyle(m.i === localIndex ? hero.f.role : foe.f.role, m.key),
+        m.point,
+        m.blocked === true,
+      )
     if (!link.host && m.type === 'wave-stop') {
       const index = waves.findIndex((p) => p.id === m.id && p.bandId === m.band)
       if (index >= 0) {
@@ -369,6 +391,7 @@ export function match(link, hero, view, physics, onEvent) {
     },
     close() {
       clearWaves()
+      view.clearEffects?.()
       display.dispose()
       remoteModel?.dispose()
       link.close()

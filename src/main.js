@@ -43,6 +43,19 @@ import {
   stepCase,
 } from './medicine.js'
 import { makeFerryScene } from './ferry-scene.js'
+import {
+  opening,
+  handbookEntries,
+  questStatus,
+  trackingKey,
+  acceptCommission,
+  recordEvidence,
+} from './handbook.js'
+import { floodSites } from './flood-evidence.js'
+import { commissionPostSite } from './commission-post.js'
+import { capitalNpcs } from './capital-data.js'
+import { roleProfiles } from './role-profiles.js'
+import { skillIcon, skillHint } from './skill-icons.js'
 import { avatarPortrait } from './avatar-portraits.js'
 
 const $ = (id) => document.getElementById(id),
@@ -62,7 +75,7 @@ let pack = migrateExpedition(data),
   bellTime = 0,
   bellStep = 0
 const medicine = medicineState(data, pack)
-const pharmacyStart = new URLSearchParams(location.search).get('quest') === 'medicine'
+
 let mapHeld = false
 let mapReleaseTime = -Infinity
 let patrol = null,
@@ -211,6 +224,25 @@ function rolePanel() {
       choice.append(el('small', r.skills.join(' · ') + '　｜　' + r.passive))
       add(choice)
     }
+    const profile = roleProfiles[data.role]
+    if (profile) {
+      add(
+        el('h3', roles[data.role].name + ' · 行者档案'),
+        el('p', profile.origin),
+        el('p', profile.fieldcraft, 'muted'),
+      )
+      const legend = el('div', null, 'skillLegend')
+      for (const [i, key] of ['q', 'e', 'c', 'v'].entries()) {
+        const item = el('div')
+        item.append(
+          skillIcon(data.role, key),
+          el('strong', key.toUpperCase() + ' · ' + roles[data.role].skills[i]),
+          el('span', skillHint(data.role, key)),
+        )
+        legend.append(item)
+      }
+      add(legend)
+    }
     const unlocked = Object.keys(skins).filter((k) => k === '巡线原色' || data.items.includes(k))
     add(el('h3', '出行装束'))
     for (const skin of unlocked)
@@ -280,11 +312,11 @@ function options() {
       el('h3', '键鼠操作'),
       el(
         'p',
-        'WASD 移动，鼠标环视，方向键亦可转动视角。左键轻击、右键重击，Q / E / C 释放技能，V 释放蓄满的绝技。',
+        'WASD 移动，鼠标环视，方向键亦可转动视角。左键轻击，X 重击，按住 F 格挡。Q / E / C 释放技能，V 释放蓄满的绝技。',
       ),
       el(
         'p',
-        'F 格挡，Shift 疾跑，按住 Caps Lock 静步，松开恢复，Ctrl 蹲下。空格跳跃，面对可触及的树节或矮台按住空格攀爬。走入光幕自动过境。R 交互，按住 Tab 看地图，松开收起，B 行囊，G 火把，T 手记。',
+        'F 格挡，Shift 疾跑，按住 Caps Lock 静步，松开恢复，Ctrl 蹲下。空格跳跃，面对可触及的树节或矮台按住空格攀爬。走入光幕自动过境。R 交互，按住 Tab 看地图，松开收起，B 行囊，G 火把，T 任务手册。',
       ),
     )
     if (import.meta.env.PROD && !globalThis.faultlineAssets) {
@@ -299,12 +331,6 @@ function fillAtlas() {
   const b = biomes[id],
     i = ids.indexOf(id)
   $('worldTitle').textContent = b.name
-  $('questStart').hidden = pharmacyStart
-  $('enter').textContent = pharmacyStart
-    ? medicine.lastZone && medicine.phase !== 'done'
-      ? '继续送药委托'
-      : '从回春药铺开始'
-    : '进入世界 · 白砥城'
   $('worldEnglish').textContent = b.english
   $('worldDesc').textContent = b.description
   $('chapter').textContent =
@@ -323,7 +349,8 @@ function fillAtlas() {
 }
 for (const key of ids) {
   const b = biomes[key]
-  const e = btn('', () => select(b.id), 'region')
+  const e = btn('', () => (b.id === 'capital' ? enter() : select(b.id)), 'region')
+  if (b.id === 'capital') e.setAttribute('aria-label', '进入主城 · 白砥城')
   e.dataset.id = b.id
   e.style.setProperty('--img', 'url("' + assetUrl('/atlas/' + b.id + '.webp') + '")')
   e.append(el('strong', b.name), el('em', b.english))
@@ -359,9 +386,162 @@ function fail(e) {
     ),
   )
 }
+function actorPoint(service) {
+  return (
+    people?.all.find((a) => a.service === service && a.f.hp > 0)?.pos ||
+    capitalNpcs.find((npc) => npc.service === service)
+  )
+}
+function questGuide() {
+  const key = data.tracked
+  if (!key) return null
+  let objective, name
+  if (key === 'medicine') {
+    name = medicineTitle
+    objective =
+      medicine.phase === 'offered'
+        ? { zone: 'capital', p: actorPoint('pharmacy'), title: '找回春药铺的谢兰心接单' }
+        : caseObjective(medicine, id)
+  } else if (key === 'prologue') {
+    const status = questStatus(data, key)
+    if (status === 'done') return null
+    const step = status === 'open' ? null : opening.steps[data.handbook.openingStep]
+    const site = step && floodSites[step.point]
+    objective = {
+      zone: 'capital',
+      p: site ? { ...site, y: heightAt('capital', site.x, site.z) } : actorPoint('clerk'),
+      title: step?.label || '找白石议庭书记衡书接下汛报',
+    }
+    name = opening.name
+  } else {
+    const task = current(data, key)
+    if (!task) return null
+    const status = questStatus(data, task.q.id)
+    name = task.q.name
+    if (status === 'open') {
+      const site = commissionPostSite(task.q.zone)
+      objective = {
+        zone: task.q.zone,
+        title: '到' + site.title + '揭榜',
+        p: { ...site, y: heightAt(task.q.zone, site.x, site.z) },
+      }
+    } else if (status === 'active')
+      objective = {
+        zone: task.step.zone,
+        title: task.step.hidden ? task.step.clue : task.step.label,
+        p: !task.step.hidden && id === task.step.zone ? poi?.[task.step.point] : null,
+      }
+  }
+  if (!objective) return null
+  const gate = objective.zone === id ? null : nextGate(id, objective.zone)
+  return { ...objective, name, gate, target: gate || objective.p }
+}
 function activeGoal() {
   const task = current(data)
-  return task && task.step.zone === id ? { ...task, p: poi?.[task.step.point] } : null
+  return task && questStatus(data, task.q.id) === 'active' && task.step.zone === id
+    ? { ...task, p: poi?.[task.step.point] }
+    : null
+}
+function commissionOffer(key) {
+  const entry = handbookEntries.find((q) => q.id === key)
+  dialog(entry.name, 'commission', () => {
+    add(
+      el('p', entry.summary || entry.steps[0].dialog),
+      el('p', '报酬 · ' + entry.reward, 'muted'),
+      btn(
+        key === 'prologue' ? '接下汛报' : '揭下委托',
+        () => {
+          if (!acceptCommission(data, key)) return
+          pin = null
+          save()
+          closeDialog()
+          msg('已接 · ' + entry.name + '　' + questGuide().title, 4)
+        },
+        'chosen',
+      ),
+      btn('稍后再来', () => closeDialog()),
+    )
+  })
+}
+function commissionBoard() {
+  dialog(commissionPostSite(id).title, 'commission', () => {
+    let count = 0
+    for (const q of side.filter((q) => q.zone === id && questStatus(data, q.id) === 'open')) {
+      add(btn(q.name + ' · ' + q.reward, () => commissionOffer(q.id)))
+      count++
+    }
+    if (!count) add(el('p', '今天能揭的委托都已领走。各地来信和新的开放条件可以在手册里查到。'))
+    add(btn('翻开任务手册', journal))
+  })
+}
+function inspectFlood(point) {
+  const advance = (answer) => {
+    if (!recordEvidence(data, point, answer)) return false
+    save()
+    closeDialog()
+    msg(
+      point === 'clerk'
+        ? '取得白砥汛印' + (questGuide() ? ' · ' + questGuide().title : ' · 白砥城已存档')
+        : '已记入汛报 · ' + opening.steps[data.handbook.openingStep].label,
+      5,
+    )
+    return true
+  }
+  dialog(point === 'clerk' ? '白石议庭 · 汛报交接' : floodSites[point].title, 'evidence', () => {
+    if (point === 'clerk') {
+      add(
+        el(
+          'p',
+          data.main || data.sub
+            ? '衡书把拓片和试钟记录放进旧案卷。“当时那一栏一直空着，多亏你回来补全。你的汛印，拿好。”'
+            : '衡书把泉井的水痕拓片贴到来报上，又翻出雨林的闸簿。“两短一长，城钟没坏。可汇流镇报来的是三声。拿着这枚汛印，去冠层观测台听听他们的钟。”',
+        ),
+        btn('签名盖印，领取汛印', () => advance()),
+      )
+      return
+    }
+    const feedback = el('p', '', 'evidenceReply')
+    feedback.setAttribute('role', 'status')
+    if (point === 'gauge') {
+      add(
+        el(
+          'p',
+          '尺脚浸在浅池里。最上方一道湿泥横过三道整尺刻线中的第三道，再往上只有干白石灰。你将薄纸覆在尺面，准备把读数留给议庭。',
+        ),
+      )
+      for (const n of [2, 3, 4])
+        add(
+          btn('拓下' + ['二', '三', '四'][n - 2] + '尺', () => {
+            if (!advance(n))
+              feedback.textContent =
+                n === 2 ? '纸边上方还有湿泥，再往上找一格。' : '这道刻线是干的，昨夜的泥痕在下方。'
+          }),
+        )
+    } else {
+      let strokes = ''
+      add(
+        el(
+          'p',
+          '钟架的铜牌刻着两个短点和一道长线。拉短绳是急音，拉长绳是延音。照着铭牌，把报汛的三拍敲给城门听。',
+        ),
+      )
+      const strike = (long) => {
+        strokes += long ? 'l' : 's'
+        audio.note(long ? 440 : 620, long ? 290 : 475, long ? 0.7 : 0.17)
+        const notation = [...strokes].map((note) => (note === 's' ? '短' : '长')).join(' · ')
+        feedback.textContent = notation
+        if (strokes.length === 3 && !advance(strokes)) {
+          feedback.textContent = notation + '　守钟人摇头，示意再照钟牌试一次。'
+          strokes = ''
+        }
+      }
+      add(
+        btn('敲短音', () => strike(false)),
+        btn('敲长音', () => strike(true)),
+      )
+    }
+    add(feedback)
+  })
 }
 function storyPanel(task, which = data.tracked, route = 'valve') {
   const s = task.step
@@ -518,7 +698,7 @@ function medicineDialog(place) {
           btn('交付油布药箱', () => {
             const r = deliverCase(medicine, pack, data, id, hero.pos)
             if (r.ok) {
-              if (data.tracked === 'medicine') data.tracked = 'main'
+              if (data.tracked === 'medicine') data.tracked = null
               pin = null
             }
             questResult(r)
@@ -547,92 +727,108 @@ function medicineDialog(place) {
     add(btn('告别', () => closeDialog()))
   })
 }
-function journal() {
-  dialog('巡线手记', 'journal', () => {
-    const which = data.tracked,
-      c = current(data)
-    const cv = el('canvas', null, 'mapImg')
-    add(cv)
-    const goal = activeGoal()
-    const delivery = data.tracked === 'medicine' ? caseObjective(medicine, id) : null
-    drawMap(
-      cv,
-      id,
-      hero.pos,
-      view.town.features,
-      delivery?.zone === id ? delivery.p : goal?.step.hidden ? null : goal?.p,
-    )
-    add(el('p', 'Tab 地图显示城门、边境与前往调查点的道路。', 'muted'), el('h3', '正在追踪'))
-    if (delivery)
-      add(el('p', medicineTitle + '　｜　' + delivery.title + ' · ' + biomes[delivery.zone].name))
-    else if (c)
-      add(
-        el(
-          'p',
-          c.q.name +
-            '　｜　' +
-            (c.step.hidden ? c.step.clue : c.step.label) +
-            ' · ' +
-            biomes[c.step.zone].name,
-        ),
-      )
-    else add(el('p', data.ending ? '盆地结局 · ' + data.ending : '此线已完成'))
-    add(
-      el('h3', '主线　' + Math.min(9, data.main) + ' / 9'),
-      btn(
-        main[data.main]?.name || '新水位线 · 完成',
-        () => {
-          data.tracked = 'main'
+function journal(tab) {
+  if (typeof tab !== 'string')
+    tab = handbookEntries.some((q) => questStatus(data, q.id, medicine) === 'active') ? 'active' : 'open'
+  const statuses = { open: '未接', active: '已接', done: '已完成' }
+  const group = (status) => (status === 'locked' ? 'open' : status)
+  const entries = handbookEntries.map((q) => ({ q, status: questStatus(data, q.id, medicine) }))
+  dialog('任务手册', 'journal', () => {
+    const tabs = el('div', null, 'bookTabs')
+    for (const [key, title] of Object.entries(statuses)) {
+      const n = entries.filter((row) => row.status === key).length
+      const button = btn(title + ' ' + n, () => journal(key), key === tab ? 'chosen' : '')
+      button.setAttribute('aria-pressed', String(key === tab))
+      tabs.append(button)
+    }
+    add(tabs)
+    const guide = questGuide()
+    if (guide) {
+      const strip = el('div', null, 'bookRoute')
+      strip.append(
+        el('strong', '正在引导 · ' + guide.name),
+        el('span', guide.title),
+        btn('停止引导', () => {
+          data.tracked = null
           save()
-          journal()
-        },
-        which === 'main' ? 'chosen' : '',
-      ),
-    )
-    add(el('h3', '当地支线'))
-    if (medicine.phase === 'offered') add(el('p', '雨后的药箱 · 去白砥城回春药铺找谢兰心。'))
-    else if (medicine.phase === 'done')
-      add(
-        el(
-          'p',
-          '雨后的药箱 ✓　' +
-            { ridge: '高岸木桥', ford: '浅滩石脊', bank: '自行寻路' }[medicine.route] +
-            (medicine.recovered ? ' · 追回落水药箱' : ''),
-        ),
+          journal(tab)
+        }),
       )
-    else
-      add(
-        btn(
-          '追踪 · ' + medicineTitle,
-          () => {
-            data.tracked = 'medicine'
+      add(strip)
+    }
+    const cards = el('div', null, 'bookCards')
+    const locked = el('details', null, 'bookLocked')
+    const folded = entries.filter((row) => row.status === 'locked')
+    locked.append(el('summary', '后续委托 · ' + folded.length))
+    for (const { q, status } of entries.filter((row) => group(row.status) === tab)) {
+      const chapter = main.indexOf(q),
+        key = trackingKey(q),
+        zone = q.zone || q.steps[0].zone
+      const card = el('article', null, 'bookCard')
+      card.dataset.quest = q.id
+      card.append(
+        el(
+          'small',
+          (q === opening ? '主线序章' : chapter >= 0 ? '主线 · 第' + (chapter + 1) + '章' : '地方委托') +
+            '　/　' +
+            biomes[zone].name,
+        ),
+        el('h3', q.name),
+      )
+      let detail = q.summary || q.steps[0].label
+      if (status === 'active') {
+        if (q === opening) detail = opening.steps[data.handbook.openingStep].label
+        else if (key === 'medicine') detail = caseObjective(medicine, id)?.title || detail
+        else {
+          const task = current(data, key)
+          detail = task.index + 1 + ' / ' + task.list.length + '　' + (task.step.clue || task.step.label)
+        }
+      } else if (status === 'locked')
+        detail =
+          '完成「' +
+          (chapter >= 0 ? (main[chapter - 1] || opening).name : main[q.open - 1].name) +
+          '」后开放'
+      else if (key === 'medicine' && status === 'done')
+        detail = (medicine.recovered ? '沿水流追回药箱，' : '') + '渡工任舟已签收。'
+      card.append(el('p', detail), el('small', '报酬 · ' + q.reward))
+      if (status === 'open' || status === 'active') {
+        const label =
+          status === 'active'
+            ? '继续引导'
+            : key === 'prologue'
+              ? '引导至衡书'
+              : key === 'medicine'
+                ? '引导至谢兰心'
+                : '引导至委托牌'
+        card.append(
+          btn(label, () => {
+            data.tracked = key
             pin = null
             save()
-            journal()
-          },
-          which === 'medicine' ? 'chosen' : '',
+            closeDialog()
+            msg(questGuide()?.title, 4)
+          }),
+        )
+      }
+      const section = status === 'locked' ? locked : cards
+      section.append(card)
+    }
+    if (!cards.childElementCount)
+      cards.append(
+        el(
+          'p',
+          tab === 'active'
+            ? '还没有接下委托。到「未接」页选一条路线，即可找到委托人。'
+            : tab === 'done'
+              ? '交付后，任务和报酬会留在这里。'
+              : '当前可接的委托已全部领取。',
+          'muted',
         ),
       )
-    for (const q of side.filter((s) => s.zone === id)) {
-      const s = current(data, q.id)
-      const e = btn(
-        q.name + (s ? '' : ' ✓'),
-        () => {
-          data.tracked = q.id
-          save()
-          journal()
-        },
-        which === q.id ? 'chosen' : '',
-      )
-      e.disabled = !s
-      add(e)
-    }
-    add(el('h3', '行囊与线索'), el('p', data.items.join('、') || '尚无领取的奖励。'))
-    if (data.secrets.length) add(el('p', data.secrets.join(' · ')))
-    add(
-      btn('返回世界', () => closeDialog()),
-      btn('打开四境世界志', toAtlas),
-    )
+    add(cards)
+    if (tab === 'open' && folded.length) add(locked)
+    if (tab === 'done' && data.secrets.length) add(el('p', '已查明 · ' + data.secrets.join('、')))
+    if (tab === 'done' && data.ending) add(el('p', '盆地结局 · ' + data.ending))
   })
 }
 function pause() {
@@ -646,7 +842,7 @@ function pause() {
       add(
         btn('区域地图', () => mapPanel()),
         btn('行囊与装备', () => inventory()),
-        btn('巡线手记', journal),
+        btn('任务手册', journal),
         btn('返回标题', toAtlas),
       )
       add(el('h3', '人机切磋'))
@@ -707,9 +903,16 @@ function speak(a) {
       el('small', biomes[id].city + '　/　' + a.job, 'muted'),
       el('p', people.speak(a)),
       btn('告别', () => closeDialog()),
-      btn('翻开当地手记', journal),
+      btn('翻开任务手册', journal),
     )
     const service = a.service || (a.job === '市集商贩' ? 'merchant' : 'resident')
+    if (id === 'capital' && service === 'clerk') {
+      const status = questStatus(data, 'prologue')
+      if (status === 'open')
+        add(btn('未盖章的汛报 · 接取主线', () => commissionOffer('prologue'), 'chosen'))
+      if (status === 'active' && data.handbook.openingStep === 2)
+        add(btn('交还汛报', () => inspectFlood('clerk'), 'chosen'))
+    }
     if (id === 'capital' && service === 'pharmacy')
       add(
         btn(
@@ -895,19 +1098,18 @@ function mapPanel(local = false) {
   dialog(biomes[id].name + ' · 地图', 'map', () => {
     const cv = el('canvas', null, 'mapImg fullMap')
     add(cv)
-    const goal = activeGoal()
-    const delivery = data.tracked === 'medicine' ? caseObjective(medicine, id) : null
+    const guide = questGuide()
     drawMap(
       cv,
       id,
       hero.pos,
       places,
-      delivery?.zone === id ? { ...delivery.p, label: '送药' } : goal?.step.hidden ? null : goal?.p,
+      guide?.target ? { ...guide.target, label: guide.gate?.name || guide.name } : null,
       { local, yaw: hero.yaw, pin },
     )
     add(
       btn(local ? '全境' : '附近街区', () => mapPanel(!local)),
-      btn('巡线手记', journal),
+      btn('任务手册', journal),
       btn('收起地图', () => closeDialog()),
     )
     add(
@@ -917,6 +1119,14 @@ function mapPanel(local = false) {
         'muted',
       ),
     )
+    if (guide)
+      add(
+        el(
+          'p',
+          guide.name + ' · ' + guide.title + (guide.gate ? '　经' + guide.gate.name : ''),
+          'mapBoss',
+        ),
+      )
     const boss = places.find((p) => p.boss)
     if (boss)
       add(
@@ -952,7 +1162,9 @@ function mapPanel(local = false) {
               ].includes(p.service),
           )
         : places.filter(
-            (p) => p.boss || ['well', 'inn', 'habitat', 'shore', 'ferry', 'case'].includes(p.kind),
+            (p) =>
+              p.boss ||
+              ['well', 'inn', 'habitat', 'shore', 'ferry', 'case', 'commission'].includes(p.kind),
           )),
     ]
     if (id === 'capital') points.push(...places.filter((p) => p.kind === 'case'))
@@ -1010,6 +1222,18 @@ function candidates() {
       const d = length(pos, p)
       if (d <= max) out.push({ title, d, run })
     }
+  if (id === 'capital' && questStatus(data, 'prologue') === 'active') {
+    const point = opening.steps[data.handbook.openingStep]?.point
+    if (floodSites[point]) {
+      const site = floodSites[point]
+      addItem(
+        { ...site, y: heightAt(id, site.x, site.z) },
+        '查验' + site.title,
+        () => inspectFlood(point),
+        3.4,
+      )
+    }
+  }
   if (goal?.p) addItem(goal.p, goal.step.label, () => storyPanel(goal), 3.3)
   if (id === 'rain') {
     const s = ferrySite()
@@ -1036,6 +1260,9 @@ function candidates() {
   )
   for (const p of resources) {
     switch (p.kind) {
+      case 'commission':
+        addItem(p, p.name + ' · 揭榜', commissionBoard, 4)
+        break
       case 'brine':
         addItem(p, p.name, () => msg('岸上凝着盐霜。饮水可到白盐城的石井补给。', 4))
         break
@@ -1258,20 +1485,12 @@ function events() {
     },
   }
 }
-async function enter(link = null, crossing = null, startAtPharmacy = false) {
+async function enter(link = null, crossing = null) {
   if (entering || !view) return
   entering = true
   const n = ++requestId
   const previous = crossing ? hero?.f : null
-  const fromGuide =
-    startAtPharmacy && !link && !crossing && !pvpLaunching && ['atlas', 'survey'].includes(mode)
-  const savedZone = medicine.lastZone
-  const resume =
-    fromGuide &&
-    ['carried', 'ground', 'floating'].includes(medicine.phase) &&
-    ids.includes(savedZone) &&
-    data.positions[savedZone]
-  if (!link) id = crossing?.to || (resume ? savedZone : 'capital')
+  if (!link) id = crossing?.to || 'capital'
   pin = null
   mode = 'loading'
   wake()
@@ -1293,13 +1512,7 @@ async function enter(link = null, crossing = null, startAtPharmacy = false) {
       loadedId = id
     }
     const b = biomes[id],
-      s = crossing
-        ? entryAt(id, crossing.from)
-        : resume
-          ? data.positions[savedZone]
-          : fromGuide && id === 'capital'
-            ? { x: 54.7, y: heightAt(id, 54.7, -21.6), z: -21.6, yaw: -Math.PI / 2 }
-            : null,
+      s = crossing ? entryAt(id, crossing.from) : null,
       origin = { x: b.spawn[0], y: heightAt(id, ...b.spawn), z: b.spawn[1] },
       p = s && ['x', 'y', 'z'].every((k) => Number.isFinite(s[k])) ? s : origin
     if (!link) {
@@ -1364,8 +1577,18 @@ async function enter(link = null, crossing = null, startAtPharmacy = false) {
     $('roleName').textContent = roles[char].name + '　/　' + roles[char].type
     $('hotbar').replaceChildren(
       ...roles[char].skills.map((name, i) => {
-        const cell = el('span', null, 'ability')
-        cell.append(el('b', ['Q', 'E', 'C', 'V'][i]), el('span', name))
+        const key = ['q', 'e', 'c', 'v'][i]
+        const cell = el('button', null, 'ability')
+        cell.type = 'button'
+        cell.title = key.toUpperCase() + ' · ' + name + '　' + skillHint(char, key)
+        cell.setAttribute('aria-label', cell.title)
+        cell.style.setProperty('--skill-ink', roles[char].color)
+        cell.append(
+          el('b', key.toUpperCase()),
+          skillIcon(char, key),
+          el('span', name, 'skillName'),
+          el('small', '', 'skillState'),
+        )
         return cell
       }),
     )
@@ -1374,11 +1597,7 @@ async function enter(link = null, crossing = null, startAtPharmacy = false) {
         ? '正在同步房间'
         : crossing
           ? '已越过边境 · ' + gates(id).find((g) => g.to === crossing.from)?.name
-          : resume
-            ? '已续上送药行程 · 按 T 查看手记'
-            : fromGuide && medicine.phase === 'offered'
-              ? '回春药铺 · 靠近谢兰心，按 R 交谈'
-              : '白砥城 · 按住 Tab 查看四门驿道，B 打开行囊',
+          : '白砥城 · 按 T 翻开任务手册，按住 Tab 查看地图',
       4,
     )
     last = performance.now()
@@ -1723,10 +1942,17 @@ function ui() {
       (hero.crouch ? '　蹲姿' : '') +
       (hero.grip ? '　攀附' : '') +
       (pack.torchLit ? '　火把' : '')
-  Array.from($('hotbar').children).forEach(
-    (cell, i) =>
-      (cell.lastChild.textContent = f.cd[i] > 0.01 ? f.cd[i].toFixed(1) + 's' : roles[f.role].skills[i]),
-  )
+  Array.from($('hotbar').children).forEach((cell, i) => {
+    const waiting = f.cd[i] > 0.01
+    const charging = i === 3 && f.charge < 99.99
+    cell.classList.toggle('cooling', waiting || charging)
+    cell.classList.toggle('primed', i === 3 && !charging && !waiting)
+    cell.lastElementChild.textContent = waiting
+      ? f.cd[i].toFixed(1) + 's'
+      : charging
+        ? Math.floor(f.charge) + '%'
+        : ''
+  })
   const tr = $('tracker')
   tr.replaceChildren()
   if (online) {
@@ -1739,7 +1965,7 @@ function ui() {
     return
   }
   const goal = activeGoal(),
-    currentTask = current(data)
+    guide = questGuide()
   if (pin?.actorId) {
     const actor = people.all.find((a) => a.id === pin.actorId && a.f.hp > 0)
     if (actor) Object.assign(pin, actor.pos)
@@ -1754,40 +1980,26 @@ function ui() {
       el('b', '人机切磋'),
       el('span', people.training.name + '　' + Math.ceil(people.training.f.hp) + ' HP'),
     )
-  else if (data.tracked === 'medicine' && caseObjective(medicine, id)) {
-    const objective = caseObjective(medicine, id),
-      target = objective.zone === id ? objective.p : nextGate(id, objective.zone)
-    tr.append(el('b', medicineTitle), el('span', objective.title))
-    if (target)
-      tr.append(
-        el(
-          'div',
-          (objective.zone === id ? '' : '经' + target.name + ' · ') +
-            Math.round(length(p, target)) +
+  else if (guide) {
+    tr.append(el('b', guide.name), el('span', guide.title))
+    if (guide.target) {
+      const bearing = el('div', null, 'routeBearing')
+      const arrow = el('i', '↑')
+      arrow.setAttribute('aria-hidden', 'true')
+      const angle = Math.atan2(guide.target.x - p.x, p.z - guide.target.z) + hero.yaw
+      arrow.style.transform = 'rotate(' + angle + 'rad)'
+      bearing.append(
+        arrow,
+        document.createTextNode(
+          (guide.gate ? biomes[guide.zone].name + ' · 经' + guide.gate.name + '　' : '') +
+            Math.round(length(p, guide.target)) +
             ' m　' +
-            pointDirection(p, target),
+            pointDirection(p, guide.target),
         ),
       )
-  } else if (currentTask) {
-    tr.append(
-      el('b', currentTask.q.name),
-      el('span', currentTask.step.hidden ? '寻访线索' : currentTask.step.label),
-    )
-    if (goal?.p && !currentTask.step.hidden)
-      tr.append(el('div', Math.round(length(p, goal.p)) + ' m　' + pointDirection(p, goal.p)))
-    else if (!goal) {
-      const gate = nextGate(id, currentTask.step.zone)
-      tr.append(
-        el(
-          'div',
-          biomes[currentTask.step.zone].name +
-            (gate
-              ? ' · 经' + gate.name + ' ' + Math.round(length(p, gate)) + 'm　' + pointDirection(p, gate)
-              : ''),
-        ),
-      )
+      tr.append(bearing)
     }
-  }
+  } else tr.append(el('b', '自由探索'), el('span', 'T　翻开任务手册'))
   if (pin)
     tr.append(
       el(
@@ -1913,7 +2125,14 @@ function motion(dx, dy) {
   }
 }
 document.addEventListener('mousemove', (e) => motion(e.movementX, e.movementY))
+canvas.addEventListener('pointerdown', (e) => {
+  if (e.pointerType === 'mouse' && e.button === 2) e.preventDefault()
+})
 canvas.addEventListener('mousedown', (e) => {
+  if (e.button !== 0) {
+    e.preventDefault()
+    return
+  }
   wake()
   dragging = true
   dragDistance = 0
@@ -1921,16 +2140,24 @@ canvas.addEventListener('mousedown', (e) => {
   if (mode === 'play' && !panel) {
     const captured = document.pointerLockElement === canvas
     inputFocus()
-    if (captured || e.button === 2) action(e.button === 2 ? 'heavy' : 'light')
-    else fallbackClick = e.button === 0
+    if (captured) action('light')
+    else fallbackClick = true
   }
 })
-window.addEventListener('mouseup', () => {
+window.addEventListener('mouseup', (e) => {
+  if (e.button !== 0) return
   if (fallbackClick && dragDistance < 6 && document.pointerLockElement !== canvas) action('light')
   dragging = false
   fallbackClick = false
 })
-canvas.addEventListener('contextmenu', (e) => e.preventDefault())
+for (const event of ['contextmenu', 'auxclick'])
+  document.addEventListener(
+    event,
+    (e) => {
+      if (e.target === canvas || document.pointerLockElement === canvas) e.preventDefault()
+    },
+    true,
+  )
 canvas.addEventListener(
   'wheel',
   (e) => {
@@ -2015,9 +2242,12 @@ document.addEventListener('keydown', (e) => {
     }
     return
   }
-  if (mode === 'play' && e.code === 'KeyB' && panel === 'pack') {
+  if (
+    mode === 'play' &&
+    ((e.code === 'KeyB' && panel === 'pack') || (e.code === 'KeyT' && panel === 'journal'))
+  ) {
     e.preventDefault()
-    closeDialog()
+    if (!e.repeat) closeDialog()
     return
   }
   if (e.code === 'Escape') {
@@ -2054,6 +2284,7 @@ document.addEventListener('keydown', (e) => {
   if (e.code === 'KeyB' && !online) inventory()
   if (e.code === 'Space') jump = true
   if (e.code === 'KeyR') interact()
+  if (e.code === 'KeyX') action('heavy')
   if (e.code === 'KeyT' && !online) journal()
   if (['KeyQ', 'KeyE', 'KeyC', 'KeyV'].includes(e.code)) action(e.code.slice(3).toLowerCase())
 })
@@ -2301,8 +2532,7 @@ function manual(host) {
     )
   })
 }
-$('enter').onclick = () => enter(null, null, pharmacyStart)
-$('questStart').onclick = () => enter(null, null, true)
+$('enter').onclick = () => enter()
 $('roleButton').onclick = rolePanel
 $('atlasMode').onclick = () => {
   closeDialog(false)

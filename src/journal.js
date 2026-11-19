@@ -1,6 +1,7 @@
 import { biomes, heightAt } from './biomes.js'
 import { main, side, steps, skins, gear } from './story.js'
 import { oldSluice } from './field-world.js'
+import { newBook, migrateBook } from './handbook.js'
 const storage = 'faultline.atlas.v1'
 export function fresh() {
   return {
@@ -14,7 +15,8 @@ export function fresh() {
     choices: {},
     items: [],
     secrets: [],
-    tracked: 'main',
+    tracked: null,
+    handbook: newBook(),
     positions: {},
     ending: '',
     visited: [],
@@ -24,7 +26,7 @@ export function fresh() {
 export function readSave() {
   try {
     const raw = JSON.parse(localStorage.getItem(storage))
-    return raw?.version === 1 ? Object.assign(fresh(), raw) : fresh()
+    return raw?.version === 1 ? Object.assign(fresh(), migrateBook(raw)) : fresh()
   } catch {
     return fresh()
   }
@@ -62,7 +64,8 @@ export function completeStep(data, which, choice) {
       data.sub = 0
       if (step.finish)
         data.ending = { old: '旧渠长明', town: '白盐有井', triple: '三闸同声' }[data.choices.M07]
-    } else if (data.tracked === which) data.tracked = 'main'
+      if (!main[data.main] && data.tracked === which) data.tracked = null
+    } else if (data.tracked === which) data.tracked = null
     return q.reward
   }
 }

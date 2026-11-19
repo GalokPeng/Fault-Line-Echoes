@@ -1,4 +1,5 @@
 import * as T from 'three'
+import { attachPhaseDial } from './avatar-phase-dial.js'
 
 export function wristRig(arms, look) {
   const groups = [],
@@ -38,10 +39,7 @@ export function wristRig(arms, look) {
     } else if (look.role === 'tide') {
       ring(0.061, 0.08, 0.011)
       ring(0.106, 0.073, 0.008)
-      const face = mesh(new T.CylinderGeometry(0.033, 0.033, 0.012, 12), dark, 0, 0.065, 0.189)
-      face.rotation.x = Math.PI / 2
-      const needle = mesh(new T.BoxGeometry(0.01, 0.039, 0.008), trim, 0, 0.061, 0.201)
-      needle.rotation.z = -0.52
+      if (i === 0) attachPhaseDial(g, 0.014, 0.102, 0.2)
     } else {
       ring(0.088, 0.078, 0.009, dark)
       for (let j = 0; j < 3; j++) {

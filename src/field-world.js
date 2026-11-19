@@ -1,3 +1,5 @@
+import { buildFloodEvidence } from './flood-evidence.js'
+import { buildCommissionPost, commissionPostSite } from './commission-post.js'
 import { createGateway } from './settlement-gateways.js'
 import * as T from 'three'
 import { biomes, heightAt, waterSurfaceData } from './biomes.js'
@@ -74,6 +76,18 @@ export function makeField(scene, id, town, data) {
     lights = [],
     models = []
   scene.add(group)
+  const ground = (x, z) => heightAt(id, x, z)
+  const evidence = id === 'capital' ? buildFloodEvidence(group, ground) : null
+  const post = buildCommissionPost(group, id, ground)
+  structures.push(...(evidence?.structures || []), ...post.colliders)
+  const postSite = commissionPostSite(id)
+  if (postSite)
+    features.push({
+      ...postSite,
+      kind: 'commission',
+      name: postSite.title,
+      y: ground(postSite.x, postSite.z),
+    })
   const portals = features.map((g) => passageFor(id, g)).filter(Boolean)
   const veils = passageVeils(group, portals)
   const gateways = id === 'capital' ? [] : portals.map((g) => createGateway(group, id, g))
@@ -455,6 +469,8 @@ export function makeField(scene, id, town, data) {
       apprentice?.update(dt, false, false, t)
     },
     dispose() {
+      evidence?.dispose()
+      post.dispose()
       veils.dispose()
       for (const gateway of gateways) gateway.dispose()
       models.forEach((a) => a.dispose())

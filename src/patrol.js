@@ -98,9 +98,11 @@ export function makePatrol(link, get, notify, award) {
       if (!model || id !== other.zone || m.zone !== id || age - received > 1.5) return
       model.perform?.(m.key)
       const spec = attackStyle(other.role, m.key)
-      if (spec?.flight && physics && echoes.length < 42 && [m.yaw, m.pitch].every(Number.isFinite)) {
+      if (![m.yaw, m.pitch].every(Number.isFinite)) return
+      const from = { x: other.x, y: other.y + (other.crouch ? 1.08 : 1.64), z: other.z }
+      view.castEffect?.(spec, from, heading(m.yaw, m.pitch), other.y)
+      if (spec?.flight && physics && echoes.length < 42) {
         display ??= flightDisplay(view.scene)
-        const from = { x: other.x, y: other.y + (other.crouch ? 1.08 : 1.64), z: other.z }
         for (const p of launchVolley(from, heading(m.yaw, m.pitch), spec)) {
           display.add(p)
           echoes.push(p)

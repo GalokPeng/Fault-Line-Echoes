@@ -361,8 +361,10 @@ export function makePeople(view, id, physics, hero, events, ecology = {}) {
   }
   function impact(a, spec, distance) {
     if (a.f.hp <= 0) return
+    const blocked = (a.f.guard || a.f.parry > 0) && a.f.stamina >= 8
     const damage = hurt(a.f, spec.dmg * (assaultBonus(a) ? 1.5 : 1))
     a.f.hp = Math.max(0, a.f.hp - damage)
+    view.impactEffect?.(spec, raised(a.pos, a.bodyHeight), blocked)
     const wasCalm = senseIncident(a)
     a.f.stun = a.boss ? (a.plan ? 0 : 0.09) : hero.f.role === 'beam' && hero.f.chain > 0 ? 0.55 : 0.26
     rewardHit(hero.f, spec, distance)
@@ -398,6 +400,7 @@ export function makePeople(view, id, physics, hero, events, ecology = {}) {
   function strike(spec) {
     const from = view.aimOrigin?.() || raised(hero.pos, hero.crouch ? 1.08 : 1.64),
       dir = heading(hero.yaw, hero.pitch)
+    view.castEffect?.(spec, from, dir, hero.pos.y)
     if (spec.flight) {
       combat.launch(hero, from, dir, spec)
       return 0

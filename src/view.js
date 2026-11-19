@@ -1,3 +1,4 @@
+import { createSkillEffects } from './skill-effects.js'
 import { placeMapLabels } from './map-labels.js'
 import * as T from 'three'
 import { biomes, heightAt, waterAt } from './biomes.js'
@@ -32,6 +33,7 @@ export function makeView(canvas, quality) {
     town,
     sky,
     weather,
+    skillEffects,
     stream,
     id,
     elapsed = 0,
@@ -154,6 +156,7 @@ export function makeView(canvas, quality) {
     for (const bullet of pellets) bullet.mesh.removeFromParent()
     pellets.length = 0
     camera.removeFromParent()
+    skillEffects?.dispose()
     stream?.dispose()
     stream = null
     land.dispose?.()
@@ -210,6 +213,7 @@ export function makeView(canvas, quality) {
       id = world
       scene = new T.Scene()
       scene.add(camera)
+      skillEffects = createSkillEffects(scene, (x, z) => heightAt(id, x, z))
       land = createLandscape(scene, id)
       stream = streamTerrain(land.ground)
       town = createSettlement(scene, id)
@@ -310,6 +314,15 @@ export function makeView(canvas, quality) {
         }
       }
     },
+    castEffect(spec, from, dir, groundY) {
+      skillEffects?.cast({ ...spec, groundY }, from, dir)
+    },
+    impactEffect(spec, point, blocked) {
+      skillEffects?.impact(spec, point, blocked)
+    },
+    clearEffects() {
+      skillEffects?.clear()
+    },
     punch(spec = {}) {
       castTime = 0
       shownHand = 1 - shownHand
@@ -336,6 +349,7 @@ export function makeView(canvas, quality) {
       })
     },
     render(dt, hour, time) {
+      skillEffects?.update(dt)
       const day = sky(camera, hour, time)
       stream?.update(dt, camera, quality)
       land.update(dt, time, day, camera)

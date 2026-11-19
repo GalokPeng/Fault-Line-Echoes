@@ -861,3 +861,185 @@ button:hover {
     max-width: 160px;
   }
 }
+
+/* The field manual uses the same paper, brass and ink palette as the atlas. */
+#dialog section:has(.bookTabs) {
+  width: min(710px, 100%);
+}
+.bookTabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 0.7rem;
+}
+#dialogBody .bookTabs button {
+  border-radius: 3px;
+  margin: 0;
+}
+.bookRoute {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  column-gap: 0.8rem;
+  align-items: center;
+  margin-top: 0.8rem;
+  padding: 0.65rem 0.85rem;
+  background: #35443c;
+  border-left: 3px solid var(--gold);
+}
+.bookRoute span {
+  grid-column: 1;
+}
+.bookRoute button {
+  grid-column: 2;
+  grid-row: 1/3;
+}
+.bookCards,
+.bookLocked[open] {
+  margin-top: 1rem;
+}
+.bookCards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 0.7rem;
+}
+.bookCard {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  background: #1a2923;
+  border: 1px solid #536254;
+  padding: 0.8rem 1rem;
+}
+.bookCard small {
+  color: #d1c4a2;
+}
+#dialogBody .bookCard h3 {
+  margin: 0.12rem 0 0;
+  color: #f7e9c9;
+  font:
+    600 1.17rem/1.45 SimSun,
+    serif;
+}
+#dialogBody .bookCard p {
+  margin: 0.35rem 0 0.7rem;
+  flex: 1;
+}
+#dialogBody .bookCard button {
+  margin: 0.55rem 0 0;
+}
+.bookLocked summary {
+  cursor: pointer;
+  color: #d5ccba;
+  padding: 0.6rem 0;
+}
+.bookLocked .bookCard {
+  margin: 0.35rem 0;
+}
+.evidenceReply {
+  color: #f1d295;
+  min-height: 1.6em;
+}
+.routeBearing i {
+  display: inline-block;
+  font: 700 1rem sans-serif;
+  color: var(--gold);
+  margin-right: 0.5rem;
+}
+.skillLegend {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem;
+}
+.skillLegend > div {
+  display: grid;
+  grid-template-columns: 2.4rem 1fr;
+  grid-template-rows: auto 1fr;
+  column-gap: 0.55rem;
+  padding: 0.45rem;
+  background: #1a2923;
+  align-content: start;
+}
+.skillLegend svg {
+  grid-row: span 2;
+  width: 2.4rem;
+  height: 2.4rem;
+}
+.skillLegend span {
+  font-size: 0.85rem;
+  color: #e0ddcb;
+}
+#hotbar {
+  pointer-events: auto;
+  gap: 0.32rem;
+}
+.ability {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  align-content: end;
+  width: 3.75rem;
+  padding: 0.2rem 0.2rem 0.25rem;
+  border-radius: 4px;
+  background: linear-gradient(160deg, #273a33f0, #15241ff5);
+  border-color: var(--skill-ink);
+}
+.ability svg {
+  width: 2.4rem;
+  height: 2.4rem;
+  display: block;
+}
+.ability b {
+  position: absolute;
+  top: 0.13rem;
+  left: 0.26rem;
+  color: #fff0c8;
+  font:
+    600 0.78rem Georgia,
+    serif;
+  z-index: 1;
+}
+.skillName {
+  color: #fff2db;
+  font-size: 0.78rem;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+.skillState {
+  position: absolute;
+  top: 0.9rem;
+  color: white;
+  background: #152620e8;
+  border-radius: 2px;
+  padding: 0 0.16em;
+  font: bold 0.76rem/1.4 sans-serif;
+}
+.skillState:empty {
+  display: none;
+}
+.ability.cooling svg {
+  opacity: 0.52;
+}
+.ability.primed {
+  box-shadow:
+    inset 0 0 0 1px #ffe49e,
+    0 0 8px #ffdb7866;
+}
+@media (max-width: 600px) {
+  .skillLegend {
+    grid-template-columns: 1fr;
+  }
+  .ability {
+    width: 2.8rem;
+    min-width: 0;
+  }
+  .ability svg {
+    width: 1.9rem;
+    height: 1.9rem;
+  }
+  .bookRoute {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

@@ -1,4 +1,4 @@
-import { heading, hurt } from './combat.js'
+import { heading, hurt, attackStyle } from './combat.js'
 import { raised, flatDistance } from './perception.js'
 import { launchVolley, advanceFlight, flightDisplay } from './perception-flight.js'
 import { markAttack, movingRing } from './perception-marks.js'
@@ -17,12 +17,19 @@ export function encounters(view, physics, hero, events, height, all, impact) {
       missiles.push(p)
     }
   }
-  function deal(a, amount, origin) {
+  function deal(a, amount, origin, actionKey = a.plan?.move.key) {
     if (hero.f.hp <= 0) return
     const facing = heading(hero.yaw),
       dx = origin.x - hero.pos.x,
       dz = origin.z - hero.pos.z
-    events.injury(hurt(hero.f, amount, dx * facing.x + dz * facing.z > 0), a)
+    const frontal = dx * facing.x + dz * facing.z > 0
+    if (a.kind === 'duelist' && actionKey)
+      view.impactEffect?.(
+        attackStyle(a.f.role, actionKey),
+        raised(hero.pos, hero.crouch ? 0.75 : 1.15),
+        frontal && (hero.f.guard || hero.f.parry > 0) && hero.f.stamina >= 8,
+      )
+    events.injury(hurt(hero.f, amount, frontal), a)
   }
   function begin(a, m) {
     const target = { ...a.lastKnown },
@@ -63,6 +70,18 @@ export function encounters(view, physics, hero, events, height, all, impact) {
       p.mark = null
       const reach = flatDistance(a.pos, hero.pos)
       const source = raised(a.pos, a.eye * 0.83)
+      if (a.kind === 'duelist') {
+        const dx = p.target.x - source.x,
+          dy = p.target.y + 1.05 - source.y,
+          dz = p.target.z - source.z
+        const dist = Math.hypot(dx, dy, dz) || 1
+        view.castEffect?.(
+          attackStyle(a.f.role, m.key),
+          source,
+          { x: dx / dist, y: dy / dist, z: dz / dist },
+          a.pos.y,
+        )
+      }
       if (afterCast.release(a, p)) {
         finish(a)
         return
@@ -173,7 +192,7 @@ export function encounters(view, physics, hero, events, height, all, impact) {
       )
       if (hit) {
         if (ally) impact(hit, p.spec, p.traveled)
-        else deal(p.owner, p.spec.dmg, p.origin)
+        else deal(p.owner, p.spec.dmg, p.origin, p.spec.key)
       }
       display.sync(p)
       if (p.done) missiles.splice(i, 1)

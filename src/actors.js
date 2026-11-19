@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { tradePoses } from './capital-trade-poses.js'
 import { avatarLook, gestureFor } from './avatar.js'
 import { torsoDetails, headDetails, wristDetails } from './avatar-tailor.js'
+import { attachPhaseDial } from './avatar-phase-dial.js'
 import { nightCreature } from './perception-night-models.js'
 import { Batch, beam, shape, releaseGeometry } from './settlement-geometry.js'
 
@@ -176,6 +177,8 @@ function person(group, kind, id, color, look) {
       }),
     )
   }
+  // Models face +Z, so anatomical left is +X (the second arm).
+  if (look?.role === 'tide') attachPhaseDial(arms[1], 0.07, -0.324, 0.091)
   const pose = (phase, walk, strike, t, tell = 0, movement = '') => {
     torso.position.y = 0.83 + Math.abs(Math.sin(phase)) * 0.034 * walk + Math.sin(t * 2) * 0.006
     torso.rotation.y = Math.sin(phase) * 0.055 * walk + Math.sin(strike * Math.PI) * 0.16

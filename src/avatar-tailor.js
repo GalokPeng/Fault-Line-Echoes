@@ -83,7 +83,6 @@ export function headDetails(p, a) {
 export function wristDetails(p, a, s) {
   const x = s * 0.07
   if (a.role === 'stone') p.block(a.trousers, x, -0.33, 0.081, 0.107, 0.152, 0.038)
-  if (a.role === 'tide') p.ball(a.trim, x, -0.32, 0.081, 0.047, 0.054, 0.022)
   if (a.role === 'beam') p.block(a.trim, x, -0.33, 0.082, 0.036, 0.105, 0.024, [0, 0, 0.41])
   if (a.role === 'leaf') p.rod(a.trim, [x - 0.032, -0.37, 0.076], [x + 0.034, -0.3, 0.076], 0.012)
 }

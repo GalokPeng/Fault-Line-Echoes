@@ -1,31 +1,6 @@
 import { biomes, heightAt, waterAt } from './biomes.js'
 
-const links = [
-  [
-    ['capital', '西门', -216, 0],
-    ['rain', '白石驿界碑', 12, 590],
-  ],
-  [
-    ['capital', '东门', 216, 0],
-    ['salt', '盐商古道', 18, 590],
-  ],
-  [
-    ['capital', '北门', 0, -216],
-    ['root', '北林石关', -20, 590],
-  ],
-  [
-    ['capital', '南门', 0, 216],
-    ['gorge', '关南驿口', 35, 590],
-  ],
-  [
-    ['rain', '古根山口', -25, -590],
-    ['root', '雨林古径', -30, -590],
-  ],
-  [
-    ['salt', '断潮山口', 70, -590],
-    ['gorge', '盐路边关', 43, -590],
-  ],
-]
+import { links, wildGateSites } from './border-sites.js'
 export function gates(id) {
   return links.flatMap((pair) =>
     pair
@@ -47,10 +22,11 @@ export function gates(id) {
 export function entryAt(id, from) {
   const g = gates(id).find((g) => g.to === from)
   if (!g) return null
-  const d = Math.hypot(g.x, g.z),
-    x = g.x - (7 * g.x) / d,
-    z = g.z - (7 * g.z) / d
-  return { x, z, y: heightAt(id, x, z), yaw: Math.atan2(g.x, g.z) }
+  const nx = id === 'capital' ? Math.sign(g.x) : 0,
+    nz = Math.sign(g.z),
+    x = g.x - nx * 10,
+    z = g.z - nz * 10
+  return { x, z, y: heightAt(id, x, z), yaw: Math.atan2(nx, nz) }
 }
 export function nextGate(id, target) {
   const first = gates(id)
@@ -71,8 +47,9 @@ function pass(id, gate) {
   const index = (x, z) => Math.round((x + half) / cell) + N * Math.round((z + half) / cell)
   const b = biomes[id],
     start = gate.z > 0 ? [0, 40] : b.landmark,
+    forecourt = [gate.x, gate.z - 28 * Math.sign(gate.z)],
     begin = index(...start),
-    end = index(gate.x, gate.z)
+    end = index(...forecourt)
   const best = new Float64Array(N * N).fill(Infinity),
     prev = new Int32Array(N * N).fill(-1)
   const heights = new Float32Array(N * N).fill(NaN),
@@ -122,12 +99,12 @@ function pass(id, gate) {
       if (score >= best[i]) continue
       best[i] = score
       prev[i] = v
-      left.set(i, score + Math.hypot(xx - gate.x, zz - gate.z))
+      left.set(i, score + Math.hypot(xx - forecourt[0], zz - forecourt[1]))
     }
   }
   const pts = []
   if (reached) for (let cursor = end; cursor !== -1; cursor = prev[cursor]) pts.push(toWorld(cursor))
-  return [start, ...pts.reverse(), [gate.x, gate.z]].filter(
+  return [start, ...pts.reverse(), forecourt, [gate.x, gate.z]].filter(
     (p, i, arr) => !i || Math.hypot(p[0] - arr[i - 1][0], p[1] - arr[i - 1][1]) > 1,
   )
 }
@@ -138,6 +115,7 @@ export function borderRoads(id) {
 }
 const roadCells = new Map()
 export function onBorderRoad(id, x, z) {
+  if (wildGateSites[id]?.some((g) => Math.abs(x - g.x) < 22 && Math.abs(z - g.z) < 18)) return true
   if (!roadCells.has(id)) {
     const cells = new Map()
     for (const { points } of borderRoads(id))

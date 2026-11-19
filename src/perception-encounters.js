@@ -2,11 +2,13 @@ import { heading, hurt } from './combat.js'
 import { raised, flatDistance } from './perception.js'
 import { launchVolley, advanceFlight, flightDisplay } from './perception-flight.js'
 import { markAttack, movingRing } from './perception-marks.js'
+import { nightAttacks, lockNightTarget } from './perception-night-attacks.js'
 
 export function encounters(view, physics, hero, events, height, all, impact) {
   const missiles = [],
     rings = [],
     display = flightDisplay(view.scene)
+  const afterCast = nightAttacks(view, physics, hero, height, launch, deal)
   function launch(owner, from, dir, spec) {
     for (const p of launchVolley(from, dir, spec)) {
       p.owner = owner
@@ -29,6 +31,7 @@ export function encounters(view, physics, hero, events, height, all, impact) {
     a.yaw = yaw
     a.walking = false
     const plan = { move: m, target, center, yaw, charge: 0, elapsed: 0, released: false, hit: false }
+    lockNightTarget(plan, height)
     a.plan = plan
     a.moveName = m.name
     if (a.boss || ['charge', 'eruption', 'ring'].includes(m.type))
@@ -55,10 +58,15 @@ export function encounters(view, physics, hero, events, height, all, impact) {
     if (!p.released) {
       p.released = true
       a.swing = 0.28
+      if (a.kind === 'duelist') a.model?.perform?.(m.key)
       p.mark?.dispose()
       p.mark = null
       const reach = flatDistance(a.pos, hero.pos)
       const source = raised(a.pos, a.eye * 0.83)
+      if (afterCast.release(a, p)) {
+        finish(a)
+        return
+      }
       if (m.type === 'bolt') {
         const to = raised(p.target, hero.crouch ? 0.71 : 1.02),
           dx = to.x - source.x,
@@ -69,7 +77,14 @@ export function encounters(view, physics, hero, events, height, all, impact) {
           a,
           source,
           { x: dx / d, y: dy / d, z: dz / d },
-          { shot: m.reach + 4, flight: m.speed, spread: m.spread, dmg: m.damage },
+          {
+            shot: m.shot ?? m.reach + 4,
+            flight: m.speed,
+            spread: m.spread,
+            dmg: m.damage,
+            visual: a.kind === 'duelist' ? a.f.role : undefined,
+            key: m.key,
+          },
         )
       } else if (m.type === 'ring') {
         const ring = {
@@ -130,6 +145,7 @@ export function encounters(view, physics, hero, events, height, all, impact) {
     if (p.charge >= m.distance - 0.005) finish(a)
   }
   function update(dt) {
+    afterCast.update(dt)
     const bodies = missiles.some((p) => p.owner === hero)
       ? all
           .filter((a) => a.f.hp > 0)
@@ -186,12 +202,14 @@ export function encounters(view, physics, hero, events, height, all, impact) {
     }
   }
   function clear() {
+    afterCast.discard()
     missiles.length = 0
     display.clear()
     for (const r of rings) r.mark?.dispose()
     rings.length = 0
   }
   function discard(owner) {
+    afterCast.discard(owner)
     for (let i = missiles.length - 1; i >= 0; i--) {
       if (missiles[i].owner !== owner) continue
       missiles[i].done = true

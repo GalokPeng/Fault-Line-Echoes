@@ -5,16 +5,10 @@ import { gates, entryAt, nextGate, borderRoads, onBorderRoad } from '../src/bord
 import { footfall, gripInReach, climbMotion } from '../src/movement.js'
 import { passageFor, crossedPassage } from '../src/passages.js'
 
-test('walk through either end of a city passage, including the edges, but stay on the wall walk', () => {
-  for (const dest of ['rain', 'salt', 'root', 'gorge']) {
-    for (const [here, there] of [
-      ['capital', dest],
-      [dest, 'capital'],
-    ]) {
-      const g = passageFor(
-        here,
-        gates(here).find((p) => p.to === there),
-      )
+test('each end of all six routes uses the full opening and remains clear on arrivals and above the arch', () => {
+  for (const here of Object.keys(biomes)) {
+    for (const border of gates(here)) {
+      const g = passageFor(here, border)
       const at = (forward, side = 0, h = 0) => ({
         x: g.x + forward * g.nx + side * g.nz,
         y: g.y + h,
@@ -23,20 +17,18 @@ test('walk through either end of a city passage, including the edges, but stay o
       assert.equal(crossedPassage([g], at(-2, g.radius - 0.32), at(1, g.radius - 0.32)), g)
       assert.equal(crossedPassage([g], at(1), at(-2)), null)
       assert.equal(crossedPassage([g], at(-2), at(-0.1)), null)
-      assert.equal(crossedPassage([g], at(-2, 0, 12), at(1, 0, 12)), null)
+      assert.equal(
+        crossedPassage([g], at(-2, 0, g.spring + g.radius + 1), at(1, 0, g.spring + g.radius + 1)),
+        null,
+      )
       assert.equal(crossedPassage([g], at(-2, g.radius + 1), at(1, g.radius + 1)), null)
       assert.equal(crossedPassage([g], at(-2), at(0)), g)
+      const inward = entryAt(here, border.to)
+      assert.ok((inward.x - g.x) * g.nx + (inward.z - g.z) * g.nz < -5)
     }
+    assert.equal(passageFor(here, { kind: 'shore', x: 0, z: 0 }), null)
   }
-  assert.equal(
-    passageFor(
-      'root',
-      gates('root').find((p) => p.to === 'rain'),
-    ),
-    null,
-  )
 })
-
 test('four reciprocal capital gates and two distinct reciprocal wilderness passes', () => {
   assert.equal(Object.keys(biomes).length, 5)
   const cap = gates('capital')

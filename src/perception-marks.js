@@ -10,8 +10,8 @@ export function markAttack(scene, plan, height) {
   function ribbon(a, b, c, d) {
     verts.push(...set(...a), ...set(...b), ...set(...d), ...set(...b), ...set(...c), ...set(...d))
   }
-  function circle(radius, thickness, angle = 2 * Math.PI, rotation = 0) {
-    const point = (a, r) => [center.x + Math.sin(a) * r, center.z + Math.cos(a) * r]
+  function circle(radius, thickness, angle = 2 * Math.PI, rotation = 0, origin = center) {
+    const point = (a, r) => [origin.x + Math.sin(a) * r, origin.z + Math.cos(a) * r]
     for (let i = 0; i < 56; i++) {
       const a = rotation - angle * 0.5 + (angle * i) / 56,
         b = a + angle / 56
@@ -23,7 +23,29 @@ export function markAttack(scene, plan, height) {
       )
     }
   }
-  if (m.type === 'charge') {
+  if (m.type === 'sandTrail') {
+    for (const site of plan.sites) circle(m.radius, 0.1, Math.PI * 2, 0, site)
+  } else if (m.type === 'echoPair') {
+    circle(m.radius, 0.09)
+    circle(0.95, 0.13)
+    circle(1.55, 0.13)
+  } else if (m.type === 'scaleFan' || m.type === 'echoCone') {
+    const angle = m.angle || m.spread * 3.1,
+      radius = m.radius || m.reach
+    circle(radius, 0.105, angle, plan.yaw)
+    const rays = m.type === 'scaleFan' ? [-0.5, -0.17, 0.17, 0.5] : [-0.5, 0.5]
+    for (const f of rays) {
+      const a = plan.yaw + angle * f,
+        sn = Math.sin(a),
+        cs = Math.cos(a)
+      const at = (d, t) => [center.x + sn * d + cs * t, center.z + cs * d - sn * t]
+      for (let i = 0; i < 12; i++) {
+        const lo = (radius * i) / 12,
+          hi = (radius * (i + 1)) / 12
+        ribbon(at(lo, -0.045), at(lo, 0.045), at(hi, 0.045), at(hi, -0.045))
+      }
+    }
+  } else if (m.type === 'charge') {
     const sn = Math.sin(plan.yaw),
       cs = Math.cos(plan.yaw),
       side = m.width
@@ -43,7 +65,9 @@ export function markAttack(scene, plan, height) {
   const g = new THREE.BufferGeometry()
   g.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3))
   const mat = new THREE.MeshBasicMaterial({
-    color: 0xffa15d,
+    color:
+      { echoPair: 0x88d6ae, sandTrail: 0xf3c47f, scaleFan: 0xc3ace3, echoCone: 0xb1b2f3 }[m.type] ||
+      0xffa15d,
     side: THREE.DoubleSide,
     transparent: true,
     opacity: 0.54,
@@ -63,7 +87,12 @@ export function markAttack(scene, plan, height) {
   }
 }
 
-export function movingRing(scene, center, height) {
+export function movingRing(
+  scene,
+  center,
+  height,
+  { yaw = 0, angle = Math.PI * 2, color = 0xbbd78a } = {},
+) {
   if (!scene?.isScene) return null
   const n = 64,
     vertices = new Float32Array(n * 18),
@@ -71,7 +100,7 @@ export function movingRing(scene, center, height) {
   const attr = new THREE.BufferAttribute(vertices, 3).setUsage(THREE.DynamicDrawUsage)
   g.setAttribute('position', attr)
   const mat = new THREE.MeshBasicMaterial({
-    color: 0xbbd78a,
+    color,
     side: THREE.DoubleSide,
     transparent: true,
     depthWrite: false,
@@ -92,7 +121,7 @@ export function movingRing(scene, center, height) {
           [i + 1, 1],
           [i, 1],
         ]) {
-          const a = (2 * Math.PI * k) / n,
+          const a = yaw - angle / 2 + (angle * k) / n,
             x = center.x + Math.sin(a) * (r + width * 0.28),
             z = center.z + Math.cos(a) * (r + width * 0.28)
           vertices[j++] = x

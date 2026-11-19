@@ -18,6 +18,7 @@ import {
   LARGE_CAPACITY,
   TORCH_HOURS,
 } from '../src/expedition.js'
+import { nightBossLoot } from '../src/expedition-harvest.js'
 import { wildlife } from '../src/perception-species.js'
 import { iconIds, iconSvg, itemIcon } from '../src/expedition-icons.js'
 
@@ -244,7 +245,7 @@ test('individual torch fuel follows game time, unrecoverable expired fuel never 
 
 test('all species provide anatomically named materials with a source, a real regional buyer and an appropriate capital buyer', () => {
   const all = Object.values(wildlife).flat()
-  assert.equal(all.length, 17)
+  assert.equal(all.length, 21)
   assert.equal(Object.keys(harvestBySpecies).length, all.length)
   const kinds = new Set()
   for (const [zone, roster] of Object.entries(wildlife)) {
@@ -267,7 +268,12 @@ test('all species provide anatomically named materials with a source, a real reg
         assert.ok(operate(bag, 'sell', id, buyer).ok)
         assert.ok(bag.currency > 0 && !bag.items[id])
       }
-      if (beast.boss) assert.ok(harvest.some((entry) => entry.id === bossLoot[zone]))
+      if (beast.boss)
+        assert.ok(
+          harvest.some(
+            (entry) => entry.id === (beast.phase === 'night' ? nightBossLoot : bossLoot)[zone],
+          ),
+        )
     }
   }
 })

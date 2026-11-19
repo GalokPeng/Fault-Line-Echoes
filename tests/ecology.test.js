@@ -24,7 +24,7 @@ const model = () => ({
   },
 })
 const point = (id, x, z) => position(x, z, heightAt(id, x, z))
-function situation(id, visibility = clear, npcSpawns = [], features = []) {
+function situation(id, visibility = clear, npcSpawns = [], features = [], ecology = {}) {
   const [x, z] = biomes[id].spawn
   const hero = {
     pos: point(id, x, z),
@@ -37,20 +37,27 @@ function situation(id, visibility = clear, npcSpawns = [], features = []) {
   }
   const log = { injuries: [], hits: [], loot: [], warn: [], duel: [] }
   const view = { actor: model, town: { npcSpawns, features }, land: { solids: [] }, effect() {} }
-  const people = makePeople(view, id, { clear: visibility }, hero, {
-    injury: (n, a) => {
-      hero.f.hp -= n
-      log.injuries.push([n, a])
+  const people = makePeople(
+    view,
+    id,
+    { clear: visibility },
+    hero,
+    {
+      injury: (n, a) => {
+        hero.f.hp -= n
+        log.injuries.push([n, a])
+      },
+      hit: (...v) => log.hits.push(v),
+      warning: (...v) => log.warn.push(v),
+      loot: (...v) => log.loot.push(v),
+      duel: (v) => log.duel.push(v),
     },
-    hit: (...v) => log.hits.push(v),
-    warning: (...v) => log.warn.push(v),
-    loot: (...v) => log.loot.push(v),
-    duel: (v) => log.duel.push(v),
-  })
+    ecology,
+  )
   return { people, hero, log }
 }
-function tick(people, s) {
-  for (let t = 0; t < s; t += 1 / 60) people.update(1 / 60, false)
+function tick(people, s, night = false) {
+  for (let t = 0; t < s; t += 1 / 60) people.update(1 / 60, night)
 }
 function isolate(people, actor) {
   for (const a of people.all)
@@ -153,6 +160,31 @@ test('a duel also ends on its leash instead of pursuing across a continent', () 
   assert.deepEqual(log.duel, [false])
   people.dispose()
 })
+test('ranged sparring partners animate and release their own basic projectile from their selected kit', () => {
+  for (const [role, basic] of [
+    ['beam', '切弦'],
+    ['tide', '音滴'],
+  ]) {
+    const { people, hero, log } = situation('capital')
+    const a = people.startDuel(role)
+    const gestures = []
+    a.model.perform = (key) => gestures.push(key)
+    a.cooldown = 0
+    hero.pos = { ...a.home, z: a.home.z + 6 }
+    a.yaw = 0
+    people.update(0.02, false)
+    const move = a.plan?.move
+    assert.equal(move?.type, 'bolt')
+    assert.equal(move?.key, 'light')
+    assert.equal(move.name, basic)
+    tick(people, move.windup + 0.025)
+    assert.deepEqual(gestures, ['light'])
+    assert.deepEqual(log.injuries, [])
+    tick(people, 0.6)
+    assert.equal(log.injuries.length, 1)
+    people.dispose()
+  }
+})
 test('a stallholder reports a witnessed theft to a guard in earshot, who can approach and hurt the thief', () => {
   const at = (id, x, z, guard = false) => ({
     id,
@@ -214,42 +246,54 @@ test('three wave bolts take time, can miss a sidestep, stop at cover and hit one
 })
 test('each region has its local species and a distinct boss windup that can be dodged', () => {
   const moves = new Set()
-  for (const [id, roster] of Object.entries(wildlife)) {
-    const { people, hero, log } = situation(id)
-    assert.deepEqual(new Set(people.all.map((a) => a.species?.id)), new Set(roster.map((s) => s.id)))
-    const boss = people.all.find((a) => a.boss)
-    assert.ok(boss)
-    isolate(people, boss)
-    boss.yaw = 0
-    boss.cooldown = 0
-    hero.pos = point(id, boss.home.x, boss.home.z + 6)
-    hero.f.hp = 500
-    people.update(0.02, false)
-    assert.ok(boss.plan, id)
-    const first = boss.plan.move
-    moves.add(first.type)
-    tick(people, first.windup * 0.5)
-    assert.equal(log.injuries.length, 0, id)
-    hero.pos = point(id, boss.home.x + 24, boss.home.z + 6)
-    tick(people, first.windup * 0.5 + 1.26)
-    assert.equal(log.injuries.length, 0, id)
-    for (const species of roster) {
-      const rig = createActor('beast', id, species)
-      rig.update(0.05, true, false, 1, { type: first.type, progress: 0.7 })
-      rig.group.updateMatrixWorld(true)
-      assert.ok(new T.Box3().setFromObject(rig.group).max.y > species.scale * 0.7)
-      rig.fall(0.8)
-      assert.ok(Math.abs(rig.group.children[1].rotation.z) > 1.2)
-      rig.update(1 / 60, false, false)
-      assert.equal(rig.group.children[1].rotation.z, 0)
-      rig.dispose()
+  for (const [id, roster] of Object.entries(wildlife))
+    for (const night of [false, true]) {
+      const { people, hero, log } = situation(id)
+      people.syncClock(night)
+      assert.deepEqual(
+        new Set(people.all.map((a) => a.species?.id)),
+        new Set(roster.filter((s) => !s.boss || s.phase === (night ? 'night' : 'day')).map((s) => s.id)),
+      )
+      const boss = people.all.find((a) => a.boss)
+      assert.ok(boss)
+      isolate(people, boss)
+      boss.yaw = 0
+      boss.cooldown = 0
+      hero.pos = point(id, boss.home.x, boss.home.z + 6)
+      hero.f.hp = 500
+      people.update(0.02, night)
+      assert.ok(boss.plan, id)
+      const first = boss.plan.move
+      moves.add(first.type)
+      tick(people, first.windup * 0.5, night)
+      assert.equal(log.injuries.length, 0, id)
+      hero.pos = point(id, boss.home.x + 24, boss.home.z + 6)
+      tick(people, first.windup * 0.5 + 2.12, night)
+      assert.equal(log.injuries.length, 0, id)
+      for (const species of roster.filter((s) => !s.boss || s.phase === (night ? 'night' : 'day'))) {
+        const rig = createActor('beast', id, species)
+        rig.update(0.05, true, false, 1, { type: first.type, progress: 0.7 })
+        rig.group.updateMatrixWorld(true)
+        assert.ok(new T.Box3().setFromObject(rig.group).max.y > species.scale * 0.7)
+        rig.fall(0.8)
+        assert.ok(Math.abs(rig.group.children[1].rotation.z) > 1.2)
+        rig.update(1 / 60, false, false)
+        assert.equal(rig.group.children[1].rotation.z, 0)
+        rig.dispose()
+      }
+      people.dispose()
     }
-    people.dispose()
-  }
-  assert.deepEqual(moves, new Set(['bolt', 'eruption', 'ring', 'charge']))
+  assert.deepEqual(
+    moves,
+    new Set(['bolt', 'eruption', 'ring', 'charge', 'echoPair', 'sandTrail', 'scaleFan', 'echoCone']),
+  )
 })
 test('all live species yield their own anatomical parts at the defeated body and cannot drop twice', () => {
   const materials = {
+    poolBell: ['bellSac', 'bellWeb'],
+    sailViper: ['sailFang', 'sailHood'],
+    atlasMoth: ['mothSilkWing', 'mothAntenna'],
+    echoBat: ['batMembrane', 'batHook'],
     reedDrake: ['reedScale', 'reedSkin'],
     mireBoar: ['mirePork', 'mireHide'],
     kingfisher: ['kingQuill', 'kingBreast'],
@@ -272,6 +316,8 @@ test('all live species yield their own anatomical parts at the defeated body and
   for (const [world, roster] of Object.entries(wildlife))
     for (const species of roster) {
       const { people, hero, log } = situation(world)
+      const night = species.phase === 'night'
+      people.syncClock(night)
       const a = people.all.find((actor) => actor.species.id === species.id)
       isolate(people, a)
       const defeat = { ...a.pos }
@@ -298,14 +344,14 @@ test('all live species yield their own anatomical parts at the defeated body and
         assert.equal(qty, harvestBySpecies[source].find((entry) => entry.id === id).qty)
         assert.ok(Number.isInteger(qty) && qty > 0)
       }
-      people.update(0.85, false)
+      people.update(0.85, night)
       assert.equal(a.model.group.visible, true)
       assert.ok(a.model.group.userData.fallTime > 0.8)
-      people.update(24, false)
+      people.update(24, night)
       assert.equal(a.model.group.visible, false)
       assert.equal(a.f.hp, 0)
-      people.update(151, false)
-      assert.equal(a.f.hp, a.f.maxHp)
+      people.update(151, night)
+      assert.equal(a.f.hp, a.boss ? 0 : a.f.maxHp)
       assert.equal(a.corpse, 0)
       people.dispose()
       sampled++

@@ -1,3 +1,4 @@
+import { biomes, gridDivisions, heightAt } from './biomes.js'
 import * as THREE from 'three'
 import { at } from './settlement-kit.js'
 
@@ -399,22 +400,46 @@ export function district(ctx, layout) {
     polygonOffsetFactor: -1,
     polygonOffsetUnits: -1,
   })
-  const rect = new THREE.PlaneGeometry(1, 1)
-  rect.rotateX(-Math.PI / 2)
-  const ground = new THREE.InstancedMesh(rect, material, layout.length)
-  const temp = new THREE.Object3D()
-  layout.forEach(([x, z, yaw, w, d], i) => {
-    temp.position.set(x, ctx.base + 0.08, z)
-    temp.scale.set(w * 1.88, 1, d * 1.84)
-    temp.rotation.y = yaw
-    temp.updateMatrix()
-    ground.setMatrixAt(i, temp.matrix)
-  })
+  const vertices = [],
+    uvs = [],
+    indices = []
+  const r = biomes[ctx.id].radius,
+    cell = (2 * r) / gridDivisions
+  for (const [x, z, yaw, w, d] of layout) {
+    const spread = Math.hypot(w * 0.94, d * 0.92)
+    const imin = Math.floor((x - spread + r) / cell),
+      imax = Math.ceil((x + spread + r) / cell)
+    const jmin = Math.floor((z - spread + r) / cell),
+      jmax = Math.ceil((z + spread + r) / cell)
+    const row = imax - imin + 1,
+      start = vertices.length / 3
+    for (let j = jmin; j <= jmax; j++)
+      for (let i = imin; i <= imax; i++) {
+        const wx = i * cell - r,
+          wz = j * cell - r
+        vertices.push(wx, heightAt(ctx.id, wx, wz) + 0.028, wz)
+        const dx = wx - x,
+          dz = wz - z
+        uvs.push(
+          0.5 + (dx * Math.cos(yaw) - dz * Math.sin(yaw)) / (w * 1.88),
+          0.5 + (dx * Math.sin(yaw) + dz * Math.cos(yaw)) / (d * 1.84),
+        )
+        if (i < imax && j < jmax) {
+          const v = start + (j - jmin) * row + i - imin
+          indices.push(v, v + row, v + 1, v + 1, v + row, v + row + 1)
+        }
+      }
+  }
+  const geo = new THREE.BufferGeometry()
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3))
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2))
+  geo.setIndex(indices)
+  const ground = new THREE.Mesh(geo, material)
   ground.renderOrder = 1
   ctx.group.add(ground)
   return () => {
     map.dispose()
     material.dispose()
-    ground.dispose()
+    geo.dispose()
   }
 }

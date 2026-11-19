@@ -58,17 +58,19 @@ export function inventoryGrid(list, pack, context, state, { render, trigger, att
   const category = (item) =>
     item.slot
       ? slots[item.slot]
-      : item.relief
-        ? '药剂'
-        : item.dish
-          ? '生肉'
-          : item.water && !item.food
-            ? '饮水'
-            : item.food
-              ? '食物'
-              : item.species
-                ? '采集材料'
-                : '行旅物资'
+      : item.quest
+        ? '委托物品'
+        : item.relief
+          ? '药剂'
+          : item.dish
+            ? '生肉'
+            : item.water && !item.food
+              ? '饮水'
+              : item.food
+                ? '食物'
+                : item.species
+                  ? '采集材料'
+                  : '行旅物资'
   function cell(entry) {
     const { id, slot, qty, key } = entry
     const item = items[id],

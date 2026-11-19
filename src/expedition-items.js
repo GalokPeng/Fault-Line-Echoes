@@ -6,6 +6,11 @@ export const slots = { weapon: '武器', head: '头部', body: '身体', legs: '
 // Volume is packed litres, mass is kg, water portions hold half a litre.
 const good = (name, volume, mass, extra = {}) => ({ name, volume, mass, ...extra })
 export const items = {
+  medicineCase: good('油布药箱', 4, 2.1, {
+    quest: true,
+    source: '白砥城 · 回春药铺',
+    purpose: '谢兰心托送给浅汊渡工的药箱。占 4 L。背带可找练家衣坊系牢，落水后沿朱红系带追回。',
+  }),
   bun: good('炉蒸包子', 0.35, 0.19, { food: 25 }),
   meat: good('烤兽肉', 0.55, 0.32, { food: 44 }),
   rawMeat: good('生兽肉', 0.55, 0.34, {

@@ -1,7 +1,7 @@
 import { biomes, heightAt, waterAt } from './biomes.js'
-import { fighter, hurt, recover, rewardHit, length, sight, heading } from './combat.js'
+import { fighter, hurt, recover, rewardHit, length, sight, heading, practiceMoves } from './combat.js'
 import { raised, flatDistance, sees, hears, swivel } from './perception.js'
-import { wildlife, emptyHand, guardPalm, practiceWave } from './perception-species.js'
+import { wildlife, emptyHand, guardPalm } from './perception-species.js'
 import { encounters } from './perception-encounters.js'
 import { borderRoads } from './borders.js'
 import { harvestBySpecies } from './expedition-harvest.js'
@@ -21,7 +21,7 @@ const sightOf = (a, night, crouch = false) => ({
   elevation: 58,
   targetEye: crouch ? 0.71 : 1.19,
 })
-export function makePeople(view, id, physics, hero, events) {
+export function makePeople(view, id, physics, hero, events, ecology = {}) {
   const b = biomes[id],
     all = []
   let training = null,
@@ -31,14 +31,33 @@ export function makePeople(view, id, physics, hero, events) {
   const h = (x, z) => heightAt(id, x, z)
   const isWild = id !== 'capital' && wildlife[id]
   const routes = id === 'capital' ? cityWalker(view.town.colliders, view.land.solids) : null
-  let report = null
+  let report = null,
+    activeBoss = null,
+    manualSeason = 0,
+    phaseKey = null,
+    seasonElapsed = 0
+  const saved = ecology.field || {},
+    dens = new Map()
+  if (
+    isWild &&
+    (!saved.bossSeasons || typeof saved.bossSeasons !== 'object' || Array.isArray(saved.bossSeasons))
+  )
+    saved.bossSeasons = {}
+  const defeats = isWild ? saved.bossSeasons : {}
+  let checkedLegacy = false
+
   const combat = encounters(view, physics, hero, events, h, all, impact)
   function hammerImpact(p) {
     view.town.workImpact?.(p)
     events.hammer?.(p)
   }
   function materialize(a) {
-    if (!a.model) a.model = view.actor(a.kind, id, a.species || undefined)
+    if (!a.model)
+      a.model = view.actor(
+        a.kind,
+        id,
+        a.kind === 'duelist' ? { role: a.f.role, skin: '巡线原色' } : a.species || undefined,
+      )
     const g = a.model.group
     g.position.set(a.pos.x, a.pos.y, a.pos.z)
     g.rotation.y = a.yaw
@@ -99,13 +118,36 @@ export function makePeople(view, id, physics, hero, events) {
       a.yaw = a.goods ? Math.atan2(a.goods.x - p.x, a.goods.z - p.z) : Math.atan2(-p.x, -p.z)
   }
   function safeNest(x, z, boss = false) {
-    for (let k = 0; k < 35; k++) {
-      const r = k ? 1.35 * Math.sqrt(k) : 0,
+    for (let k = 0; k < (boss ? 300 : 35); k++) {
+      const r = k ? (boss ? 2.33 : 1.35) * Math.sqrt(k) : 0,
         a = k * 2.399,
         xx = x + Math.cos(a) * r,
         zz = z + Math.sin(a) * r,
         y = h(xx, zz)
       if (waterAt(id, xx, zz).canCollect) continue
+      if (
+        boss &&
+        (Math.hypot(xx, zz) < 82 ||
+          [
+            [4, 0],
+            [-4, 0],
+            [0, 4],
+            [0, -4],
+          ].some(([dx, dz]) => waterAt(id, xx + dx, zz + dz).wet))
+      )
+        continue
+      if (
+        boss &&
+        view.town.colliders?.some((c) => {
+          if (y + 3 < c.y - c.h / 2 || y > c.y + c.h / 2) return false
+          const dx = xx - c.x,
+            dz = zz - c.z,
+            co = Math.cos(c.yaw || 0),
+            si = Math.sin(c.yaw || 0)
+          return Math.abs(dx * co - dz * si) < c.w / 2 + 4 && Math.abs(dx * si + dz * co) < c.d / 2 + 4
+        })
+      )
+        continue
       const slope = Math.hypot(h(xx + 1, zz) - y, h(xx, zz + 1) - y)
       if (slope > (boss ? 0.46 : 0.72)) continue
       if (
@@ -125,7 +167,8 @@ export function makePeople(view, id, physics, hero, events) {
   if (isWild) {
     const roster = wildlife[id],
       species = roster.filter((s) => !s.boss && !s.habitat),
-      boss = roster.find((s) => s.boss)
+      dayBoss = roster.find((s) => s.phase === 'day'),
+      nightBoss = roster.find((s) => s.phase === 'night')
     const place = (s, x, z) => {
       const p = safeNest(x, z, s.boss)
       return p ? add('beast', s.name, ...p, 'stone', { species: s, yaw: seq * 2.399 }) : null
@@ -173,8 +216,20 @@ export function makePeople(view, id, physics, hero, events) {
         [-4, -4],
         [0, 0],
       ]
-    if (!offsets.some(([dx, dz]) => place(boss, x + dx, z + dz)))
-      add('beast', boss.name, x, z, 'stone', { species: boss })
+    // Select dens once from the real terrain and structures; their marker and
+    // the actor always share the same location, including after a zone reload.
+    for (const [species, anchors] of [
+      [dayBoss, offsets.map(([dx, dz]) => [x + dx, z + dz])],
+      [nightBoss, [nightBoss.nest]],
+    ]) {
+      for (const [xx, zz] of anchors) {
+        const nest = safeNest(xx, zz, true)
+        if (nest) {
+          dens.set(species.phase, { species, nest })
+          break
+        }
+      }
+    }
     const grazer = roster.find((s) => s.habitat === 'riverMeadow')
     if (grazer)
       for (const [xx, zz] of [
@@ -185,6 +240,89 @@ export function makePeople(view, id, physics, hero, events) {
         [14, 446],
       ])
         place(grazer, xx, zz)
+  }
+  function removeActor(a) {
+    combat.cancel(a)
+    combat.discard(a)
+    a.model?.dispose()
+    const index = all.indexOf(a)
+    if (index >= 0) all.splice(index, 1)
+  }
+  function syncClock(isNight = night) {
+    const clock = ecology.clock?.()
+    const scheduled = clock ? clock.hour < 6 || clock.hour >= 18 : !!isNight
+    if (!clock && scheduled !== night) manualSeason++
+    night = scheduled
+    if (!isWild) return
+    const phase = night ? 'night' : 'day'
+    seasonElapsed = clock?.elapsed ?? time / 36
+    // Anchor the night to dusk, so midnight does not spawn another boss.
+    const began = (period) => clock.elapsed - ((clock.hour - (period === 'night' ? 18 : 6) + 24) % 24)
+    if (!checkedLegacy && clock) {
+      checkedLegacy = true
+      // Earlier saves stored only a named remains bag. Preserve that harvest
+      // and count it against its most recent appearance on the first load.
+      for (const lot of saved.drops || []) {
+        if (lot.kind !== 'remains' || lot.zone !== id) continue
+        const s = wildlife[id].find((s) => s.boss && (s.id === lot.speciesId || s.name === lot.name))
+        if (s && !Object.hasOwn(defeats, s.id)) {
+          const start = began(s.phase)
+          defeats[s.id] = { cycle: Math.round(start * 60), at: Math.min(start, clock.elapsed - 1) }
+        }
+      }
+    }
+    const cycle = clock ? Math.round(began(phase) * 60) : manualSeason
+    const key = phase + '-' + cycle
+    if (key === phaseKey) return
+    if (activeBoss) {
+      combat.cancel(activeBoss)
+      combat.discard(activeBoss)
+      if (
+        activeBoss.f.hp <= 0 &&
+        activeBoss.corpse > 0 &&
+        seasonElapsed - activeBoss.deathHour < 24 / 36
+      )
+        activeBoss.retired = true
+      else removeActor(activeBoss)
+      activeBoss = null
+    }
+    phaseKey = key
+    const den = dens.get(phase)
+    if (!den) return
+    const { species, nest } = den,
+      record = defeats[species.id]
+    const a = add('beast', species.name, ...nest, 'stone', { species, id: species.id, cycle })
+    activeBoss = a
+    if (record?.cycle === cycle) {
+      a.f.hp = 0
+      a.dead = Infinity
+      a.state = 'dead'
+      a.deathHour = record.at
+      a.corpse = Math.max(0, 24 - Math.max(0, seasonElapsed - record.at) * 36)
+      if (record.pos && ['x', 'y', 'z'].every((k) => Number.isFinite(record.pos[k])))
+        Object.assign(a.pos, record.pos)
+      if (a.model) a.model.group.visible = a.corpse > 0
+    }
+  }
+  syncClock()
+  function bossMarkers() {
+    syncClock()
+    if (!activeBoss || activeBoss.f.hp <= 0) return []
+    const a = activeBoss,
+      s = a.species
+    return [
+      {
+        ...a.pos,
+        home: { ...a.home },
+        actorId: a.id,
+        kind: 'boss',
+        boss: true,
+        name: s.name,
+        phase: s.phase,
+        lair: s.lair,
+        tactic: s.tactic,
+      },
+    ]
   }
   function sightNow(a, point = hero.pos) {
     return sees(a, point, physics.clear, sightOf(a, night, hero.crouch))
@@ -233,7 +371,11 @@ export function makePeople(view, id, physics, hero, events) {
     combat.cancel(a)
     a.angry = false
     a.state = 'dead'
-    a.dead = a.boss ? 150 : 65
+    if (a.boss) {
+      combat.discard(a)
+      a.deathHour = seasonElapsed
+    }
+    a.dead = a.boss ? Infinity : 65
     a.corpse = a.species ? 24 : 0
     if (a.model) {
       a.model.group.visible = !!a.corpse
@@ -246,13 +388,15 @@ export function makePeople(view, id, physics, hero, events) {
     }
     if (a.species) {
       const location = { ...a.pos }
-      for (const { id: item, qty } of harvestBySpecies[a.species.id]) {
-        events.loot?.(item, qty, a.name, location, a.species.id)
-      }
+      if (a.boss) defeats[a.species.id] = { cycle: a.cycle, at: seasonElapsed, pos: location }
+      const parts = harvestBySpecies[a.species.id]
+      if (events.harvest) events.harvest(parts, a.name, location, a.species.id)
+      else
+        for (const { id: item, qty } of parts) events.loot?.(item, qty, a.name, location, a.species.id)
     }
   }
   function strike(spec) {
-    const from = raised(hero.pos, hero.crouch ? 1.05 : 1.55),
+    const from = view.aimOrigin?.() || raised(hero.pos, hero.crouch ? 1.08 : 1.64),
       dir = heading(hero.yaw, hero.pitch)
     if (spec.flight) {
       combat.launch(hero, from, dir, spec)
@@ -434,9 +578,7 @@ export function makePeople(view, id, physics, hero, events) {
   function moves(a) {
     return (
       a.species?.moves ||
-      (a === training && a.role === 'tide'
-        ? [practiceWave, emptyHand]
-        : [a.kind === 'guard' ? guardPalm : emptyHand])
+      (a === training ? practiceMoves(a.f.role) : [a.kind === 'guard' ? guardPalm : emptyHand])
     )
   }
   function chase(a, dt) {
@@ -464,19 +606,23 @@ export function makePeople(view, id, physics, hero, events) {
     }
   }
   function update(dt, isNight) {
-    night = !!isNight
     time += dt
+    syncClock(isNight)
     for (const a of [...all]) {
       if (a.f.hp <= 0) {
         if (a.corpse > 0) {
-          a.corpse = Math.max(0, a.corpse - dt)
+          a.corpse = Math.max(
+            0,
+            Math.min(a.corpse - dt, a.boss ? 24 - (seasonElapsed - a.deathHour) * 36 : Infinity),
+          )
           if (a.corpse > 0 && length(a.pos, hero.pos) < 125) {
             const m = materialize(a)
             m.group.visible = true
             m.fall?.(24 - a.corpse, a.index % 2 ? 1 : -1)
           } else if (a.model) a.model.group.visible = false
         }
-        if (a.dead > 0 && (a.dead -= dt) <= 0) home(a)
+        if (a.retired && !a.corpse) removeActor(a)
+        else if (a.dead > 0 && (a.dead -= dt) <= 0) home(a)
         continue
       }
       const dist = length(a.pos, hero.pos),
@@ -573,6 +719,8 @@ export function makePeople(view, id, physics, hero, events) {
   return {
     all,
     update,
+    syncClock,
+    bossMarkers,
     strike,
     get training() {
       return training

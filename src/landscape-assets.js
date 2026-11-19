@@ -98,7 +98,7 @@ export class Shape {
     return g
   }
 }
-function foliageTexture(kind) {
+export function foliageTexture(kind) {
   const rv = random(kind === 'frond' ? 4923 : 7842)
   const c = document.createElement('canvas')
   c.width = c.height = 256

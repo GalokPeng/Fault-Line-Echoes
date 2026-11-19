@@ -1,3 +1,4 @@
+import { wildGateSites } from './border-sites.js'
 import { carveWaterBed } from './water-profile.js'
 import { createWaterSystem } from './water-system.js'
 export { riverX, riverWidth } from './water-profile.js'
@@ -290,6 +291,28 @@ export function gridData(id) {
   for (let j = 0; j <= n; j++)
     for (let i = 0; i <= n; i++)
       g[j * (n + 1) + i] = rawHeight(id, -r + (2 * r * i) / n, -r + (2 * r * j) / n)
+  // Cut the eight gate courts into their local ridge or dune. Keep the terrain mesh
+  // and its collision triangles identical under the arch, with a sloped apron outside.
+  const cell = (2 * r) / n
+  for (const site of wildGateSites[id] || []) {
+    const level = rawHeight(id, site.x, site.z)
+    for (
+      let j = Math.max(0, Math.floor((site.z - 32 + r) / cell));
+      j <= Math.min(n, Math.ceil((site.z + 32 + r) / cell));
+      j++
+    )
+      for (
+        let i = Math.max(0, Math.floor((site.x - 37 + r) / cell));
+        i <= Math.min(n, Math.ceil((site.x + 37 + r) / cell));
+        i++
+      ) {
+        const x = Math.abs(i * cell - r - site.x),
+          z = Math.abs(j * cell - r - site.z)
+        const weight = (1 - fade(21, 37, x)) * (1 - fade(15, 32, z))
+        const k = j * (n + 1) + i
+        g[k] = mix(g[k], level, weight)
+      }
+  }
   samples.set(id, g)
   return g
 }

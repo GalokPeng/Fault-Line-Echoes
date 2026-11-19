@@ -1,3 +1,4 @@
+import { createGateway } from './settlement-gateways.js'
 import * as T from 'three'
 import { biomes, heightAt, waterSurfaceData } from './biomes.js'
 import { gates, borderRoads } from './borders.js'
@@ -75,6 +76,8 @@ export function makeField(scene, id, town, data) {
   scene.add(group)
   const portals = features.map((g) => passageFor(id, g)).filter(Boolean)
   const veils = passageVeils(group, portals)
+  const gateways = id === 'capital' ? [] : portals.map((g) => createGateway(group, id, g))
+  for (const gateway of gateways) structures.push(...gateway.colliders)
   const materials = new Map(),
     maps = [],
     geos = new Set()
@@ -185,15 +188,6 @@ export function makeField(scene, id, town, data) {
   if (id !== 'capital') {
     for (const road of borderRoads(id)) {
       pathRibbon(road.points)
-      const g = road.gate
-      for (const side of [-1, 1]) {
-        const x = g.x + side * 2.65,
-          y = heightAt(id, x, g.z)
-        box(x, y + 2, g.z, 0.8, 4, 0.95, '#716d58', true)
-        torch(x, y + 4, g.z)
-      }
-      const sign = plaque(g.name + ' · ' + biomes[g.to].name, g.x, g.y + 3.7, g.z, 5.4)
-      if (g.z > 0) sign.rotation.y = Math.PI
       for (let j = 6; j < road.points.length - 1; j += 6) {
         const [x, z] = road.points[j],
           y = heightAt(id, x + 2, z)
@@ -462,6 +456,7 @@ export function makeField(scene, id, town, data) {
     },
     dispose() {
       veils.dispose()
+      for (const gateway of gateways) gateway.dispose()
       models.forEach((a) => a.dispose())
       group.removeFromParent()
       geos.forEach((g) => g.dispose())

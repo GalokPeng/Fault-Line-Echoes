@@ -56,7 +56,17 @@ export function streamTerrain(source) {
   for (let z = 0; z < quads; z += tile)
     for (let x = 0; x < quads; x += tile) {
       // The far bank must still meet the water at its physical elevation.
-      const precise = !!source.userData.wetTiles?.[(z / tile) * 16 + x / tile]
+      const positions = geo.attributes.position,
+        a = z * row + x,
+        b = (z + tile) * row + x + tile
+      const x0 = positions.getX(a),
+        x1 = positions.getX(b),
+        z0 = positions.getZ(a),
+        z1 = positions.getZ(b)
+      const fixed = source.userData.architectureSites?.some(
+        ([cx, cz, w, d]) => x0 <= cx + w && x1 >= cx - w && z0 <= cz + d && z1 >= cz - d,
+      )
+      const precise = fixed || !!source.userData.wetTiles?.[(z / tile) * 16 + x / tile]
       const low = patch(x, z, precise || tile % 4 !== 0 ? 1 : 4)
       chunks.push({ x, z, low, precise, hi: null, sphere: low.geometry.boundingSphere })
     }

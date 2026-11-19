@@ -1,3 +1,5 @@
+import { gestureFor, actionKeys } from './avatar.js'
+
 export const roles = {
   leaf: {
     name: '叶岚',
@@ -38,27 +40,77 @@ const kits = {
   leaf: [
     { dash: 12, dist: 3.5, dmg: 12 },
     { dash: -7, dist: 3.2, dmg: 15 },
-    { shot: 21, dmg: 17 },
+    { shot: 21, flight: 27, dmg: 17 },
     { dash: 14, dist: 4.5, dmg: 48 },
   ],
   stone: [
     { dash: 8, dist: 3.9, dmg: 20 },
     { parry: 1.15, dist: 2.8, dmg: 10 },
-    { shot: 12, dmg: 23 },
+    { shot: 12, flight: 16, dmg: 23 },
     { dist: 5, dmg: 58 },
   ],
   tide: [
-    { shot: 38, dmg: 21 },
+    { shot: 38, flight: 32, dmg: 21 },
     tideWave,
-    { dash: -12, shot: 15, dmg: 13 },
-    { shot: 42, dmg: 19, burst: 3 },
+    { dash: -12, shot: 15, flight: 19, dmg: 13 },
+    { shot: 42, flight: 26, dmg: 19, burst: 3 },
   ],
   beam: [
-    { shot: 18, dmg: 16, spread: 0.16 },
-    { shot: 25, dmg: 22 },
+    { shot: 18, flight: 17, dmg: 16, spread: 0.16 },
+    { shot: 25, flight: 24, dmg: 22 },
     { dash: 9, dist: 3, dmg: 12 },
-    { shot: 34, dmg: 33, spread: 0.1 },
+    { shot: 34, flight: 21, dmg: 33, spread: 0.1 },
   ],
+}
+const basicShots = {
+  tide: [
+    { name: '音滴', shot: 15, flight: 21, dmg: 9 },
+    { name: '沉波', shot: 20, flight: 15, dmg: 17 },
+  ],
+  beam: [
+    { name: '切弦', shot: 9, flight: 18, dmg: 10 },
+    { name: '横弦', shot: 12, flight: 14, dmg: 18 },
+  ],
+}
+// A receiving client reconstructs artwork and flight from a known role and key.
+export function attackStyle(role, key) {
+  if (!Object.hasOwn(roles, role) || !actionKeys.includes(key)) return null
+  const skill = ['q', 'e', 'c', 'v'].indexOf(key)
+  const data = skill >= 0 ? kits[role][skill] : basicShots[role]?.[key === 'heavy' ? 1 : 0] || {}
+  return { ...data, role, key, pose: gestureFor(role, key), visual: role }
+}
+
+// Sparring partners give a readable wind-up, then commit to the same cast as the player.
+const practiceKeys = {
+  leaf: ['light', 'q', 'heavy'],
+  stone: ['heavy', 'q', 'light'],
+  tide: ['light', 'e', 'heavy'],
+  beam: ['light', 'q', 'heavy'],
+}
+const sparring = Object.fromEntries(
+  Object.entries(practiceKeys).map(([role, keys]) => [
+    role,
+    keys.map((key) => {
+      const spec = cast(fighter(role), key)
+      const heavy = key === 'heavy'
+      const move = {
+        key,
+        name: spec.name,
+        reach: spec.shot || spec.dist,
+        windup: spec.skill ? 0.74 : heavy ? 0.65 : 0.4,
+        damage: spec.dmg,
+        rest: spec.skill ? 1.4 : heavy ? 1.0 : 0.78,
+      }
+      if (spec.shot)
+        return { ...move, type: 'bolt', speed: spec.flight, spread: spec.spread, shot: spec.shot }
+      if (spec.dash > 0)
+        return { ...move, type: 'charge', speed: spec.dash, distance: spec.dist, width: 0.62 }
+      return { ...move, type: heavy ? 'sweep' : 'bite' }
+    }),
+  ]),
+)
+export function practiceMoves(role) {
+  return sparring[role] || sparring.leaf
 }
 export const length = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z)
 export function fighter(role = 'leaf') {
@@ -89,11 +141,13 @@ export function recover(f, dt) {
 }
 export function cast(f, key) {
   if (f.hp <= 0 || f.busy > 0.001 || f.stun > 0) return null
+  const style = attackStyle(f.role, key)
+  if (!style) return null
   const ix = ['q', 'e', 'c', 'v'].indexOf(key)
   let spec
   if (ix >= 0) {
     if (f.cd[ix] > 0 || (ix === 3 && f.charge < 99.99) || f.stamina < 6) return null
-    spec = { ...kits[f.role][ix], name: roles[f.role].skills[ix], skill: true }
+    spec = { ...style, name: roles[f.role].skills[ix], skill: true }
     f.cd[ix] = [3.5, 5, 4.8, 10][ix]
     if (ix === 3) f.charge = 0
     f.parry = spec.parry || 0
@@ -104,13 +158,16 @@ export function cast(f, key) {
     if (f.stamina < (heavy ? 11 : 4)) return null
     f.combo = f.chain > 0 ? (f.combo % 3) + 1 : 1
     f.chain = 0.94
-    spec = {
-      name: heavy ? '重击' : ['', '起手', '接掌', '三连'][f.combo],
-      dist: heavy ? 3.35 : 3,
-      dmg: (heavy ? 20 : 11) + (f.combo === 3 ? 7 : 0),
-    }
+    spec = style.shot
+      ? { ...style, dmg: style.dmg + (f.combo === 3 ? 4 : 0) }
+      : {
+          ...style,
+          name: heavy ? '重击' : ['', '起手', '接掌', '三连'][f.combo],
+          dist: heavy ? 3.35 : 3,
+          dmg: (heavy ? 20 : 11) + (f.combo === 3 ? 7 : 0),
+        }
     f.stamina -= heavy ? 11 : 4
-    f.busy = heavy ? 0.46 : 0.25
+    f.busy = style.shot ? (heavy ? 0.64 : 0.38) : heavy ? 0.46 : 0.25
   }
   if (spec.dash) {
     f.dash = 0.27

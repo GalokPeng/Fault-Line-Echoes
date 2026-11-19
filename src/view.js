@@ -1,8 +1,11 @@
+import { placeMapLabels } from './map-labels.js'
 import * as T from 'three'
 import { biomes, heightAt, waterAt } from './biomes.js'
 import { createLandscape } from './landscape.js'
 import { createSettlement } from './settlements.js'
 import { createActor } from './actors.js'
+import { avatarLook, gestureFor, handMotion } from './avatar.js'
+import { wristRig } from './avatar-wrists.js'
 import { makeSky } from './sky.js'
 import { weatherSystem } from './weather.js'
 import { streamTerrain } from './terrain-stream.js'
@@ -58,33 +61,70 @@ export function makeView(canvas, quality) {
       return p
     }
     part(new T.CapsuleGeometry(0.09, 0.28, 3, 9), sleeve, 0, -0.08, 0.11, 0.89, 1, 1)
-    part(new T.CylinderGeometry(0.098, 0.087, 0.095, 10), band, 0, 0.09, 0.105, 1, 1, 1)
-    part(new T.SphereGeometry(0.093, 11, 8), skin, 0, 0.17, 0.098, 1, 0.94, 0.86)
+    part(new T.CylinderGeometry(0.083, 0.084, 0.064, 12), band, 0, 0.085, 0.105, 1, 1, 1)
+    part(new T.SphereGeometry(0.085, 13, 10), skin, 0, 0.172, 0.108, 0.94, 1.03, 0.68)
     const digits = []
     for (let i = 0; i < 4; i++) {
       const phalanx = part(
-        new T.CapsuleGeometry(0.015, 0.038 + (i === 1 ? 0.014 : 0), 3, 7),
+        new T.CapsuleGeometry(0.016, 0.044 + (i === 1 ? 0.014 : 0), 3, 8),
         skin,
         (i - 1.5) * 0.034,
         0.212,
-        0.059,
+        0.128,
         1,
         1,
         1,
       )
       phalanx.rotation.x = -1.12
+      const tip = new T.Mesh(new T.CapsuleGeometry(0.013, 0.021, 3, 7), skin)
+      tip.position.set(0, 0.04, -0.008)
+      tip.rotation.x = -0.35
+      phalanx.add(tip)
       digits.push(phalanx)
     }
     fingers.push(digits)
-    part(new T.SphereGeometry(0.037, 8, 6), skin, -sign * 0.065, 0.165, 0.046, 1, 1.2, 1)
+    const thumb = part(
+      new T.CapsuleGeometry(0.021, 0.056, 3, 8),
+      skin,
+      -sign * 0.072,
+      0.178,
+      0.117,
+      1,
+      1,
+      1,
+    )
+    thumb.rotation.z = sign * 0.65
+    thumb.rotation.x = -0.45
     arm.rotation.x = -0.85
     arm.rotation.z = sign * 0.35
     hands.add(arm)
     arms.push(arm)
   }
   camera.add(hands)
+  let appearance,
+    wrists,
+    gesture = 'jab',
+    impactKey = 'light'
+  function setAvatar(role, skinName) {
+    const next = avatarLook(role, skinName)
+    if (appearance?.role === next.role && appearance?.skin === next.skin) return
+    appearance = next
+    skin.color.set(appearance.flesh)
+    sleeve.color.set(appearance.coat)
+    band.color.set(appearance.trim)
+    for (const arm of arms) arm.scale.set(appearance.width, 1, appearance.width)
+    wrists?.dispose()
+    wrists = wristRig(arms, appearance)
+    hands.userData.avatar = appearance
+    gesture = 'jab'
+    castTime = 9
+  }
+  setAvatar('leaf', '巡线原色')
   const staff = new T.Group(),
-    wood = new T.Mesh(new T.CylinderGeometry(0.023, 0.032, 0.49, 8), band)
+    wood = new T.Mesh(
+      new T.CylinderGeometry(0.023, 0.032, 0.49, 8),
+      new T.MeshStandardMaterial({ color: '#806449', roughness: 0.94 }),
+    )
   const wick = new T.Mesh(
     new T.IcosahedronGeometry(0.074, 1),
     new T.MeshBasicMaterial({ color: 0xffac48 }),
@@ -96,7 +136,7 @@ export function makeView(canvas, quality) {
   arms[0].add(staff)
   staff.visible = false
   const weapon = new T.Group(),
-    rod = new T.Mesh(new T.CylinderGeometry(0.02, 0.032, 0.84, 8), band)
+    rod = new T.Mesh(new T.CylinderGeometry(0.02, 0.032, 0.84, 8), wood.material)
   const blade = new T.Mesh(
     new T.OctahedronGeometry(0.1, 0),
     new T.MeshStandardMaterial({ color: 0xbfc9c4, metalness: 0.56, roughness: 0.35 }),
@@ -146,6 +186,10 @@ export function makeView(canvas, quality) {
   return {
     renderer,
     camera,
+    setAvatar,
+    aimOrigin() {
+      return { x: camera.position.x, y: camera.position.y, z: camera.position.z }
+    },
     get scene() {
       return scene
     },
@@ -223,21 +267,34 @@ export function makeView(canvas, quality) {
       wick.scale.set(0.75, 1.45 + 0.22 * Math.sin(time * 11), 0.75)
       castTime += dt
       for (let i = 0; i < 2; i++) {
-        const s = i ? 1 : -1,
-          pulse = shownHand === i ? Math.max(0, Math.sin(Math.min(1, castTime / 0.35) * Math.PI)) : 0
-        arms[i].position.set(
-          s * (guard ? 0.185 : 0.266),
-          (guard ? -0.29 : -0.413) + bob * 0.4 + Math.sin(time * 1.8 + i) * 0.012 + pulse * 0.065,
-          -0.44 - pulse * 0.3,
+        const s = i ? 1 : -1
+        const swing = handMotion(
+          gesture,
+          castTime / (impactKey === 'heavy' ? 0.48 : impactKey === 'v' ? 0.55 : 0.34),
+          s,
+          shownHand === i,
         )
-        arms[i].rotation.x = -0.85 - pulse * 0.78
-        arms[i].rotation.z = s * (guard ? 0.63 : 0.3)
+        const atRest = appearance.role === 'tide' ? 0.82 : appearance.role === 'beam' ? 0.6 : 0.04
+        arms[i].position.set(
+          s * (guard ? 0.185 : 0.266 * appearance.stance) + swing.x,
+          (guard ? -0.29 : -0.397) + bob * 0.4 + Math.sin(time * 1.8 + i) * 0.012 + swing.y,
+          -0.44 + swing.z,
+        )
+        arms[i].rotation.x = -0.85 + swing.tilt
+        arms[i].rotation.z = s * (guard ? 0.63 : 0.3) + swing.roll
+        wrists.flash(i, grip || guard ? 0 : swing.open)
         for (let j = 0; j < 4; j++) {
           const finger = fingers[i][j],
-            openness = grip ? 0.55 + 0.45 * Math.sin(grip.phase * 6 + i * Math.PI) : 0
-          finger.rotation.x = -1.12 + openness * 1.08
-          finger.position.y = 0.212 + 0.04 * openness
-          finger.rotation.z = (j - 1.5) * 0.09 * openness
+            openness = grip
+              ? 0.55 + 0.45 * Math.sin(grip.phase * 6 + i * Math.PI)
+              : guard || (i === 1 && weaponId) || (i === 0 && staff.visible)
+                ? 0
+                : Math.max(atRest, swing.open)
+          finger.rotation.x = -1.23 + openness * 1.52
+          finger.position.y = 0.22 + (0.061 - 0.009 * Math.abs(j - 1)) * openness
+          finger.position.z = 0.137 + 0.009 * openness
+          finger.rotation.z = -(j - 1.5) * 0.17 * openness
+          finger.children[0].rotation.x = -0.86 + 0.63 * openness
         }
         if (grip) {
           const phase = grip.phase * 6 + i * Math.PI,
@@ -253,9 +310,11 @@ export function makeView(canvas, quality) {
         }
       }
     },
-    punch() {
+    punch(spec = {}) {
       castTime = 0
       shownHand = 1 - shownHand
+      impactKey = spec.key || 'light'
+      gesture = spec.pose || gestureFor(appearance.role, impactKey)
     },
     actor(kind, world, color) {
       const a = createActor(kind, world, color)
@@ -350,13 +409,9 @@ export function drawMap(canvas, id, p, places, goal, { local = false, yaw = 0, p
     ctx.arc(X(x), Z(z), r, 0, 7)
     ctx.fill()
   }
-  function label(x, z, name, color) {
-    ctx.font = '15px "Microsoft YaHei UI",sans-serif'
-    ctx.strokeStyle = '#14241e'
-    ctx.lineWidth = 3
-    ctx.strokeText(name, X(x) + 6, Z(z) - 4)
-    ctx.fillStyle = color
-    ctx.fillText(name, X(x) + 6, Z(z) - 4)
+  const labels = []
+  function label(x, z, name, color, priority = 2) {
+    labels.push({ x: X(x), y: Z(z), name, color, priority })
   }
   if (id === 'capital') {
     line(
@@ -395,7 +450,10 @@ export function drawMap(canvas, id, p, places, goal, { local = false, yaw = 0, p
   for (const mark of places || []) {
     if (mark.boss) {
       dot(mark.x, mark.z, '#f99777', 4)
-      label(mark.x, mark.z, mark.name, '#edb593')
+      label(mark.x, mark.z, mark.name, '#edb593', 7)
+    } else if (mark.kind === 'ferry' || mark.kind === 'case') {
+      dot(mark.x, mark.z, '#d3b77e', 4)
+      if (local || mark.kind === 'case') label(mark.x, mark.z, mark.name, '#f3ce95', 5)
     } else if (mark.kind === 'shore') {
       dot(mark.x, mark.z, '#81c7d5', 3.5)
       if (local) label(mark.x, mark.z, mark.name, '#acdfe3')
@@ -403,6 +461,13 @@ export function drawMap(canvas, id, p, places, goal, { local = false, yaw = 0, p
       dot(mark.x, mark.z, '#d0bf82', 3.5)
       if (local) label(mark.x, mark.z, mark.name, '#e5d49a')
     } else if (mark.service || ['well', 'inn', 'upper', 'underground'].includes(mark.kind)) {
+      if (
+        !local &&
+        id === 'capital' &&
+        mark.service &&
+        !['pharmacy', 'inn', 'smith', 'outfitter', 'baker'].includes(mark.service)
+      )
+        continue
       dot(mark.x, mark.z, '#a4ceb3')
       if (local || (id === 'capital' && ['well', 'inn'].includes(mark.kind)))
         label(mark.x, mark.z, mark.job || mark.name, '#d1debd')
@@ -410,17 +475,38 @@ export function drawMap(canvas, id, p, places, goal, { local = false, yaw = 0, p
   }
   for (const g of gates(id)) {
     dot(g.x, g.z, '#e9c68a', 5)
-    label(g.x, g.z, '通往' + biomes[g.to].name, '#ffdea3')
+    label(g.x, g.z, '通往' + biomes[g.to].name, '#ffdea3', 8)
   }
   if (goal) {
     dot(goal.x, goal.z, '#e5b74b', 5)
-    label(goal.x, goal.z, '调查', 'white')
+    label(goal.x, goal.z, goal.label || '调查', 'white', 9)
   }
   if (pin) {
     ctx.strokeStyle = '#ffc554'
     ctx.beginPath()
     ctx.arc(X(pin.x), Z(pin.z), 8, 0, 7)
     ctx.stroke()
+    label(pin.x, pin.z, pin.name, '#ffd478', 10)
+  }
+  ctx.font = '14px "Microsoft YaHei UI",sans-serif'
+  const reserved = [
+    { left: 3, top: 3, right: 40, bottom: 25 },
+    { left: 3, top: h - 49, right: 85, bottom: h - 5 },
+    { left: X(p.x) - 7, top: Z(p.z) - 8, right: X(p.x) + 7, bottom: Z(p.z) + 8 },
+  ]
+  for (const mark of placeMapLabels(labels, w, h, (name) => ctx.measureText(name).width, reserved)) {
+    if (Math.abs(mark.top + 10 - mark.y) > 14) {
+      ctx.strokeStyle = mark.color
+      ctx.lineWidth = 0.9
+      ctx.beginPath()
+      ctx.moveTo(mark.x, mark.y)
+      ctx.lineTo(mark.x < mark.left ? mark.left : mark.right, mark.top + 9)
+      ctx.stroke()
+    }
+    ctx.fillStyle = 'rgba(20,34,29,.85)'
+    ctx.fillRect(mark.left, mark.top, mark.right - mark.left, 17)
+    ctx.fillStyle = mark.color
+    ctx.fillText(mark.name, mark.left + 3, mark.top + 13)
   }
   ctx.save()
   ctx.translate(X(p.x), Z(p.z))

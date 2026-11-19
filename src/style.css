@@ -222,8 +222,9 @@ button:hover {
 }
 .enterrow {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 24px;
+  gap: 8px clamp(12px, 2vw, 24px);
   margin-top: clamp(16px, 3vh, 35px);
 }
 .primary {
@@ -629,6 +630,14 @@ button:hover {
 .roleCard {
   display: block;
   width: 100%;
+  min-height: 77px;
+}
+.roleCard img {
+  float: left;
+  width: 63px;
+  height: 70px;
+  object-fit: contain;
+  margin: -5px 12px -4px -4px;
 }
 .roleCard small {
   display: block;

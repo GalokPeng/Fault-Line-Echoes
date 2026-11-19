@@ -1,10 +1,11 @@
 import * as T from 'three'
+import { gateProfile } from './border-sites.js'
 import { assetUrl } from './asset-url.js'
 
 const colors = { rain: 0x88d4ae, salt: 0xf9c988, root: 0xadc387, gorge: 0xffab86, capital: 0xe9d9a2 }
 
 export function passageFor(id, gate) {
-  if (id !== 'capital' && gate.to !== 'capital') return null
+  if (gate.kind !== 'border') return null
   const city = id === 'capital'
   const nx = city ? Math.sign(gate.x) : 0,
     nz = Math.sign(gate.z)
@@ -14,8 +15,8 @@ export function passageFor(id, gate) {
     z: gate.z - (city ? 2.42 * nz : 0),
     nx,
     nz,
-    radius: city ? 6.12 : 2.27,
-    spring: city ? 3.75 : 1.5,
+    radius: city ? 6.12 : gateProfile[id].radius,
+    spring: city ? 3.75 : gateProfile[id].spring,
   }
 }
 
@@ -58,7 +59,11 @@ void main(){
   vec2 dust=vec2((p.x+sin(p.y*.2+t*.4)*.12)*4.,p.y*3.-t*.9);
   float fleck=(1.-smoothstep(.025,.15,length(fract(dust)-.5)))*step(.86,hash(floor(dust)));
   float edge=exp(-max(rim,0.)*8.)+.48*exp(-max(p.y,0.)*6.);
-  vec3 light=mix(image*1.10,tint,.14)+tint*(.085*wave+.15*veil+edge*.86+fleck*.5);
+  float folds=sin(x*10.+y*3.2+1.45*sin(4.3*y-.7*t)+.55*sin(x*5.+t*.48)-t*.86);
+  float silk=pow(1.-abs(folds),6.)*(.31+.26*pow(1.-y,2.));
+  float current=exp(-13.*abs(fract(y*.82+.14*sin(x*4.+t*.41)-t*.075)-.5));
+  vec3 light=mix(image*1.06,tint,.18)+tint*(.065*wave+.16*veil+.97*edge+fleck*.57+silk+current*.14);
+  light+=mix(tint,vec3(1.),.48)*exp(-max(rim,0.)*18.)*.69;
   gl_FragColor=vec4(light,.94);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>

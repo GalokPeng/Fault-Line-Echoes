@@ -1,4 +1,5 @@
-import { fighter, recover, cast, hurt, rewardHit, heading, sight, roles, tideWave } from './combat.js'
+import { fighter, recover, cast, hurt, rewardHit, heading, sight, roles, attackStyle } from './combat.js'
+import { avatarLook, actionKeys } from './avatar.js'
 import { launchVolley, advanceFlight, flightDisplay } from './perception-flight.js'
 export async function connectRoom(invite, onStatus, onOpen, onClose) {
   const host = !invite
@@ -146,6 +147,7 @@ export function match(link, hero, view, physics, onEvent) {
     recvTime = performance.now(),
     remoteYaw = 0,
     remotePitch = 0,
+    movingFor = 0,
     phase = 'ready',
     delay = 0,
     round = 1,
@@ -176,7 +178,7 @@ export function match(link, hero, view, physics, onEvent) {
         own = p.i === localIndex,
         attacker = own ? hero : foe,
         defender = own ? foe : hero
-      const center = { ...defender.pos, y: defender.pos.y + 1.12 }
+      const center = { ...defender.pos, y: defender.pos.y + (defender.crouch ? 0.74 : 1.12) }
       const bodies = link.host ? [{ actor: defender, center, radius: 0.68 }] : []
       const target = advanceFlight(p, dt, physics.clear, bodies)
       if (target) {
@@ -193,7 +195,7 @@ export function match(link, hero, view, physics, onEvent) {
       display.sync(p)
       if (p.done) {
         waves.splice(j, 1)
-        if (link.host) link.send({ type: 'wave-stop', id: p.id, band: p.band })
+        if (link.host) link.send({ type: 'wave-stop', id: p.id, band: p.bandId })
       }
       if (target && !defender.f.hp) {
         finish(p.i)
@@ -233,15 +235,21 @@ export function match(link, hero, view, physics, onEvent) {
       defender = own ? foe : hero
     const spec = cast(attacker.f, key)
     if (!spec) return
+    if (own) view.punch(spec)
+    else remoteModel.perform?.(key)
     const dir = heading(own ? hero.yaw : remoteYaw, own ? hero.pitch : remotePitch),
-      from = { ...attacker.pos, y: attacker.pos.y + 1.54 },
-      to = { ...defender.pos, y: defender.pos.y + 1.16 }
+      from = (own && view.aimOrigin?.()) || {
+        ...attacker.pos,
+        y: attacker.pos.y + (attacker.crouch ? 1.08 : 1.64),
+      },
+      to = { ...defender.pos, y: defender.pos.y + (defender.crouch ? 0.74 : 1.12) }
     if (spec.flight) {
       const id = ++volleyId
       emitWave(id, i, from, dir, spec)
-      link.send({ type: 'wave', id, i, from, dir })
+      link.send({ type: 'wave', id, i, key, from, dir })
       return
     }
+    link.send({ type: 'stroke', i, key })
     const range = spec.shot || spec.dist,
       hit = sight(from, dir, to, range, spec.shot ? 0.87 : 1.15)
     if (spec.shot)
@@ -265,15 +273,14 @@ export function match(link, hero, view, physics, onEvent) {
     }
   }
   function hello() {
-    link.send({ type: 'hello', role: hero.f.role, color: hero.color })
+    link.send({ type: 'hello', role: hero.f.role, skin: hero.skin, color: hero.color })
   }
   link.listen((m) => {
     if (!m || typeof m !== 'object') return
     if (m.type === 'hello' && !foe) {
-      const role = Object.hasOwn(roles, m.role) ? m.role : 'leaf',
-        color = /^#[a-f\d]{6}$/i.test(m.color) ? m.color : roles[role].color
+      const role = Object.hasOwn(roles, m.role) ? m.role : 'leaf'
       foe = { pos: spawn(otherIndex), f: fighter(role) }
-      remoteModel = view.actor('player', hero.world, color)
+      remoteModel = view.actor('player', hero.world, avatarLook(role, m.skin || m.color))
       hello()
       reset()
       return
@@ -288,10 +295,25 @@ export function match(link, hero, view, physics, onEvent) {
       [m.from, m.dir].every((v) => v && [v.x, v.y, v.z].every(Number.isFinite)) &&
       waves.length < 30
     ) {
-      emitWave(m.id, m.i, m.from, m.dir, tideWave)
+      const own = m.i === localIndex
+      const spec = attackStyle(own ? hero.f.role : foe.f.role, m.key || 'e')
+      if (!spec?.flight) return
+      if (own) view.punch(spec)
+      else remoteModel.perform?.(spec.key)
+      emitWave(m.id, m.i, m.from, m.dir, spec)
+    }
+    if (
+      !link.host &&
+      phase === 'fight' &&
+      m.type === 'stroke' &&
+      [0, 1].includes(m.i) &&
+      actionKeys.includes(m.key)
+    ) {
+      if (m.i === localIndex) view.punch(attackStyle(hero.f.role, m.key))
+      else remoteModel.perform?.(m.key)
     }
     if (!link.host && m.type === 'wave-stop') {
-      const index = waves.findIndex((p) => p.id === m.id && p.band === m.band)
+      const index = waves.findIndex((p) => p.id === m.id && p.bandId === m.band)
       if (index >= 0) {
         const [p] = waves.splice(index, 1)
         p.done = true
@@ -310,14 +332,22 @@ export function match(link, hero, view, physics, onEvent) {
         (d <= limit &&
           Math.abs(y - foe.pos.y) <= Math.max(1.1, 18 * dt) &&
           physics.clear({ ...foe.pos, y: foe.pos.y + 0.87 }, { x, y: y + 0.87, z }))
-      )
+      ) {
+        if (d > 0.015) movingFor = 0.17
         foe.pos = { x, y, z }
+      }
       remoteYaw = yaw
       remotePitch = pitch
       foe.f.guard = Boolean(m.guard)
+      foe.crouch = !!m.crouch
     }
-    if (link.host && m.type === 'act' && ['light', 'heavy', 'q', 'e', 'c', 'v'].includes(m.key))
+    if (link.host && m.type === 'act' && actionKeys.includes(m.key)) {
+      if (Number.isFinite(m.yaw) && Number.isFinite(m.pitch)) {
+        remoteYaw = m.yaw
+        remotePitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, m.pitch))
+      }
       attack(otherIndex, m.key)
+    }
     if (!link.host && m.type === 'state' && Array.isArray(m.players)) {
       Object.assign(hero.f, m.players[1])
       Object.assign(foe.f, m.players[0])
@@ -355,8 +385,7 @@ export function match(link, hero, view, physics, onEvent) {
     cast(key) {
       if (phase !== 'fight') return
       if (link.host) attack(localIndex, key)
-      else link.send({ type: 'act', key })
-      view.punch()
+      else link.send({ type: 'act', key, yaw: hero.yaw, pitch: hero.pitch })
     },
     update(dt) {
       if (!foe) {
@@ -381,7 +410,14 @@ export function match(link, hero, view, physics, onEvent) {
       if (phase === 'fight' && waves.length) tickWaves(dt)
       remoteModel.group.position.set(foe.pos.x, foe.pos.y, foe.pos.z)
       remoteModel.group.rotation.y = remoteYaw + Math.PI
-      remoteModel.update(dt, false, false)
+      movingFor = Math.max(0, movingFor - dt)
+      remoteModel.update(
+        dt,
+        movingFor > 0,
+        false,
+        undefined,
+        foe.f.guard ? { type: 'guard', progress: 0.5 } : undefined,
+      )
       acc += dt
       if (acc < 0.055) return
       acc = 0
@@ -389,6 +425,7 @@ export function match(link, hero, view, physics, onEvent) {
         type: 'move',
         p: [hero.pos.x, hero.pos.y, hero.pos.z, hero.yaw, hero.pitch],
         guard: hero.f.guard,
+        crouch: hero.crouch,
       })
       if (link.host)
         link.send({

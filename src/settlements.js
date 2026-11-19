@@ -1,3 +1,4 @@
+import { settlementLayouts as layouts, houseFoundation } from './settlement-sites.js'
 import * as THREE from 'three'
 import { createCapital } from './capital.js'
 import { biomes, heightAt } from './biomes.js'
@@ -33,16 +34,41 @@ const details = {
 }
 
 function dwelling(ctx, x, z, yaw, w, d, h, variant, sign) {
-  const b = at(ctx, x, z, yaw),
+  const site = houseFoundation(ctx.id, x, z, yaw, w, d),
+    b = at(ctx, x, z, yaw, site.base),
     c = ctx.colors,
     id = ctx.id
   const timber = id === 'rain' || id === 'root',
     front = d / 2,
     door = 1.62,
     wall = 0.26
-  const dock = timber ? 0.31 : 0.13
-  b.box(timber ? 'wood' : 'masonry', c.base, 0, dock * 0.44, 0, w + 0.76, dock * 0.9, d + 0.85, true)
-  b.box(timber ? 'wood' : 'masonry', c.edge, 0, 0.08, front + 0.64, 2.28, 0.15, 1.01, true)
+  const dock = site.dock,
+    bottom = site.min - site.base,
+    cap = timber ? 0.14 : 0.09
+  b.box(
+    'masonry',
+    c.stone,
+    0,
+    (dock - cap + bottom) / 2,
+    0,
+    w + 0.72,
+    dock - cap - bottom,
+    d + 0.81,
+    true,
+  )
+  b.box(timber ? 'wood' : 'masonry', c.edge, 0, dock - cap / 2, 0, w + 0.76, cap, d + 0.85, true)
+  for (const step of site.steps)
+    b.box(
+      'masonry',
+      c.base,
+      0,
+      (step.top + step.min) / 2 - site.base,
+      step.offset,
+      2.35,
+      step.top - step.min,
+      site.tread + 0.008,
+      true,
+    )
   const mat = timber ? 'plaster' : 'masonry'
   for (const s of [-1, 1]) {
     b.box(mat, c.wall, s * (w * 0.5 - wall * 0.5), h * 0.5 + dock, 0, wall, h, d, true)
@@ -76,7 +102,46 @@ function dwelling(ctx, x, z, yaw, w, d, h, variant, sign) {
   }
   if (timber) {
     b.box('wood', c.edge, 0, h - 0.13 + dock, 0, w + 0.53, 0.2, d + 0.4)
-    gable(b, c, 0, h + dock, 0, w + 1.14, d + 1.3, id === 'root' ? 2.1 : 1.41)
+    const pitch = id === 'root' ? 2.1 : 1.41
+    gable(b, c, 0, h + dock, 0, w + 1.14, d + 1.3, pitch)
+    // Ventilated timber end walls follow the roof slope. The eaves project
+    // beyond the boards, keeping the join and the upper vent in shade.
+    const courses = Math.ceil(pitch / 0.22)
+    for (const end of [-1, 1]) {
+      const face = end * (front - 0.06)
+      for (let i = 0; i < courses; i++) {
+        const rise = (pitch * (i + 0.5)) / courses
+        const width = Math.min(w, (w + 1.14) * (1 - (i + 1) / courses))
+        if (width > 0.1)
+          b.box(
+            'wood',
+            i % 3 ? c.wall : c.edge,
+            0,
+            h + dock + rise,
+            face,
+            width,
+            pitch / courses - 0.038,
+            0.14,
+          )
+      }
+      for (const side of [-1, 1])
+        b.rod(
+          'wood',
+          c.wood,
+          [0, h + dock + pitch - 0.09, face + end * 0.1],
+          [(side * w) / 2, h + dock + 0.08, face + end * 0.1],
+          0.13,
+          true,
+        )
+      b.rod(
+        'wood',
+        c.edge,
+        [0, h + dock, face + end * 0.12],
+        [0, h + dock + pitch - 0.14, face + end * 0.12],
+        0.14,
+        true,
+      )
+    }
     // Tied timber braces and a drying pole under the eaves.
     for (const s of [-1, 1])
       b.rod(
@@ -141,7 +206,8 @@ function dwelling(ctx, x, z, yaw, w, d, h, variant, sign) {
         b.box('metal', c.shade, s * w * 0.49, h * 0.5 + dock, front + 0.13, 0.13, h, 0.07)
     }
   }
-  b.barrel(-w * 0.44, dock, front + 0.62, 0.95)
+  const [barrelX, , barrelZ] = b.pt(-w * 0.44, 0, front + 1.13)
+  b.barrel(-w * 0.44, heightAt(id, barrelX, barrelZ) - site.base, front + 1.13, 0.95)
   b.lantern(door * 0.66, 2.04 + dock, front + 0.41, 0.77)
   b.box('wood', c.wood, -w * 0.25, 0.65 + dock, -front + 0.73, 1.56, 0.13, 0.7)
   for (const s of [-1, 1])
@@ -486,52 +552,6 @@ function streetLife(ctx) {
         0.32,
       )
   }
-}
-const layouts = {
-  rain: [
-    [-23, 9, 1.42, 6.2, 7.1, 3.23],
-    [-23, -7, 1.72, 6.5, 7.8, 3.11],
-    [-14, 24, 2.82, 7.1, 5.8, 3.15],
-    [10.8, 25, -2.75, 6.4, 5.4, 3.36],
-    [-13, -25, 0.15, 6.1, 6.8, 2.98],
-    [14, -25, -0.41, 7.8, 6.0, 3.28],
-    [36, 11, -1.63, 7.4, 6.9, 3.44],
-    [34, -18, -1.26, 6.2, 6.9, 3.12],
-    [-29, 24, 2.45, 7.4, 5.8, 2.96],
-  ],
-  salt: [
-    [-23, -5, 1.57, 8.2, 6.9, 4.06],
-    [-25, 13, 1.4, 6.3, 7.5, 3.7],
-    [-15, 25, 2.83, 6.8, 6.0, 3.22],
-    [10.8, 27, -2.75, 6.9, 5.8, 3.65],
-    [-16, -27, 0.06, 7.8, 6.0, 3.68],
-    [11, -26, -0.05, 7.1, 7.2, 4.6],
-    [40, 0, -1.57, 8.5, 7.0, 4.1],
-    [33, 24, -1.83, 8.2, 6.2, 3.84],
-    [31, -23, -0.33, 7.25, 6.1, 3.44],
-    [-31, -17, 1.1, 7.4, 6.9, 3.1],
-  ],
-  root: [
-    [-26, 5, 1.76, 5.8, 6.4, 3.18],
-    [-24, -13, 1.12, 5.4, 6.0, 3.03],
-    [-11, 24, 2.56, 6.9, 5.8, 3.13],
-    [11, 25, -2.52, 6.5, 5.1, 3.07],
-    [-17, -28, 0.39, 5.9, 6.2, 3.44],
-    [12, -26, -0.54, 6.2, 6.4, 3.41],
-    [37, 14, -1.92, 6.7, 6.2, 3.13],
-    [34, -19, -0.84, 6.6, 5.9, 3.23],
-  ],
-  gorge: [
-    [-25, 3, 1.57, 8.2, 6.8, 4.0],
-    [-25, 18, 1.57, 5.9, 6.8, 3.4],
-    [-12, 25, 2.98, 6.8, 5.9, 4.14],
-    [10, 27, -2.96, 6.9, 5.6, 3.6],
-    [-14, -25, 0, 7.6, 7.4, 4.31],
-    [14, -24, -0.12, 7.8, 6.0, 4.84],
-    [38, 7, -1.57, 8.2, 7.4, 4.22],
-    [34, -23, -0.41, 6.6, 5.9, 3.89],
-    [-28, -16, 1.5, 6.5, 7.0, 4.27],
-  ],
 }
 export function createSettlement(scene, id) {
   if (id === 'capital') return createCapital(scene)

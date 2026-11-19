@@ -1,4 +1,6 @@
+import { wildGateSites } from './border-sites.js'
 import * as THREE from 'three'
+import { onFerryWorks } from './ferry-site.js'
 import { onBorderRoad } from './borders.js'
 import { createWater } from './water-render.js'
 import { createCapitalLandscape } from './capital-landscape.js'
@@ -318,6 +320,7 @@ function adornments(id, group, solids) {
     Math.hypot(x - wildX, z - wildZ) > 9 &&
     !onBorderRoad(id, x, z)
   function tree(x, z, index, s, a = rng() * 6.28) {
+    if (onFerryWorks(id, x, z, 1.6 * s)) return
     const bank = waterAt(id, x, z)
     if (
       bank.canCollect ||
@@ -490,6 +493,7 @@ function adornments(id, group, solids) {
     }
   }
   function stone(x, z, rx, h, rz, which, spire = false, solid = true, rotation = rng() * 6.28) {
+    if (onFerryWorks(id, x, z, Math.max(rx, rz))) return
     const center = terrainY(x, z)
     if (
       Math.abs(x - riverX(id, z)) < riverWidth(id, z) + 64 &&
@@ -810,12 +814,20 @@ function drift(id, group) {
   return pts
 }
 export function createLandscape(scene, id) {
-  if (id === 'capital') return createCapitalLandscape(scene)
+  if (id === 'capital') {
+    const land = createCapitalLandscape(scene)
+    land.ground.userData.architectureSites = [[-90, -57, 18, 28]]
+    return land
+  }
   const group = new THREE.Group()
   group.name = id + '-landscape'
   scene.add(group)
   const ground = terrain(id),
     solids = []
+  ground.userData.architectureSites = [
+    [0, 0, 56, 52],
+    ...wildGateSites[id].map((g) => [g.x, g.z, 24, 20]),
+  ]
   group.add(ground)
   horizon(id, group)
   const path = road(id, group)

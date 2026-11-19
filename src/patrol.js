@@ -1,5 +1,7 @@
 import { biomes } from './biomes.js'
-import { roles, length } from './combat.js'
+import { roles, length, attackStyle, heading } from './combat.js'
+import { avatarLook, actionKeys } from './avatar.js'
+import { launchVolley, advanceFlight, flightDisplay } from './perception-flight.js'
 
 // A guest follows the host's room selection even when joining with only a room code.
 export function roomActivity(link, choice) {
@@ -40,6 +42,17 @@ export function makePatrol(link, get, notify, award) {
     done = false,
     age = 0,
     received = 0
+  let appearance = '',
+    display = null
+  const echoes = []
+  function clearModel() {
+    model?.dispose()
+    model = null
+    appearance = ''
+    display?.dispose()
+    display = null
+    echoes.length = 0
+  }
   function result() {
     if (done) return
     done = true
@@ -76,8 +89,23 @@ export function makePatrol(link, get, notify, award) {
         ...m,
         role: Object.hasOwn(roles, m.role) ? m.role : 'leaf',
         color: /^#[a-f\d]{6}$/i.test(m.color) ? m.color : null,
+        skin: avatarLook(m.role, m.skin || m.color).skin,
       }
       return
+    }
+    if (m.type === 'gesture' && actionKeys.includes(m.key) && other) {
+      const { id, view, physics } = get()
+      if (!model || id !== other.zone || m.zone !== id || age - received > 1.5) return
+      model.perform?.(m.key)
+      const spec = attackStyle(other.role, m.key)
+      if (spec?.flight && physics && echoes.length < 42 && [m.yaw, m.pitch].every(Number.isFinite)) {
+        display ??= flightDisplay(view.scene)
+        const from = { x: other.x, y: other.y + (other.crouch ? 1.08 : 1.64), z: other.z }
+        for (const p of launchVolley(from, heading(m.yaw, m.pitch), spec)) {
+          display.add(p)
+          echoes.push(p)
+        }
+      }
     }
     if (m.type === 'station' && link.host) signal(other, m.station, 'guest')
     if (m.type === 'bell' && !link.host) {
@@ -93,6 +121,11 @@ export function makePatrol(link, get, notify, award) {
     get done() {
       return done
     },
+    gesture(key) {
+      const { hero, id } = get()
+      if (hero && actionKeys.includes(key))
+        link.send({ type: 'gesture', zone: id, key, yaw: hero.yaw, pitch: hero.pitch })
+    },
     interact(station) {
       const { hero, id } = get()
       if (link.host) signal({ ...hero.pos, zone: id }, station, 'host')
@@ -102,7 +135,7 @@ export function makePatrol(link, get, notify, award) {
       }
     },
     update(dt) {
-      const { view, hero, id, data } = get()
+      const { view, hero, id, data, physics } = get()
       if (!hero) return
       age += dt
       sent += dt
@@ -114,20 +147,24 @@ export function makePatrol(link, get, notify, award) {
           ...hero.pos,
           role: hero.f.role,
           color: hero.color,
+          skin: hero.skin,
+          guard: hero.f.guard,
+          crouch: hero.crouch,
           yaw: hero.yaw,
           hour: data.hour,
           moving: !!hero.moving,
         })
       }
       if (other && !link.host) data.hour = other.hour
-      if (ownerScene !== view.scene || other?.zone !== id) {
-        model?.dispose()
-        model = null
+      const nextLook = other ? other.role + '/' + other.skin : ''
+      if (ownerScene !== view.scene || other?.zone !== id || (model && nextLook !== appearance)) {
+        clearModel()
         ownerScene = view.scene
       }
       if (other?.zone === id) {
         if (!model) {
-          model = view.actor('player', id, other.color || roles[other.role].color)
+          model = view.actor('player', id, { role: other.role, skin: other.skin })
+          appearance = nextLook
           model.group.position.set(other.x, other.y, other.z)
         }
         const v = model.group.position,
@@ -136,17 +173,28 @@ export function makePatrol(link, get, notify, award) {
         v.y += (other.y - v.y) * alpha
         v.z += (other.z - v.z) * alpha
         model.group.rotation.y = other.yaw + Math.PI
-        model.update(dt, other.moving, false, age)
+        model.update(
+          dt,
+          other.moving,
+          false,
+          age,
+          other.guard ? { type: 'guard', progress: 0.5 } : undefined,
+        )
+        if (display && physics)
+          for (let i = echoes.length - 1; i >= 0; i--) {
+            const p = echoes[i]
+            advanceFlight(p, dt, physics.clear, [])
+            display.sync(p)
+            if (p.done) echoes.splice(i, 1)
+          }
       }
     },
     detach() {
-      model?.dispose()
-      model = null
+      clearModel()
       ownerScene = null
     },
     close() {
-      model?.dispose()
-      model = null
+      clearModel()
       link.close()
     },
   }

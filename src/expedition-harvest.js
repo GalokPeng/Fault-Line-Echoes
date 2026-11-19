@@ -20,6 +20,102 @@ const cut = (id, name, volume, mass, price, dish, dishName, nutrition) => ({
 const fauna = [
   [
     'rain',
+    'poolBell',
+    '青喉伏钟蛙',
+    [
+      material(
+        'bellSac',
+        '伏钟蛙鸣囊膜',
+        0.41,
+        0.11,
+        17,
+        'outfitter',
+        '衣坊收作防水袋内衬，成对的鸣囊纹理清晰。',
+        2,
+      ),
+      material(
+        'bellWeb',
+        '伏钟蛙后蹼皮',
+        0.32,
+        0.15,
+        11,
+        'outfitter',
+        '掌蹼皮薄而韧，可裁成耐水的皮扣。',
+      ),
+    ],
+  ],
+  [
+    'salt',
+    'sailViper',
+    '月帆沙蝰',
+    [
+      material(
+        'sailFang',
+        '沙蝰空心弯牙',
+        0.16,
+        0.06,
+        19,
+        'smith',
+        '铁匠收存成对弧牙，用作细柄饰件。',
+        2,
+      ),
+      material(
+        'sailHood',
+        '沙蝰帆颈皮',
+        0.7,
+        0.29,
+        14,
+        'outfitter',
+        '银边颈帆保留完整鳞纹，衣坊收制领饰。',
+      ),
+    ],
+  ],
+  [
+    'root',
+    'atlasMoth',
+    '银眼苔蛾',
+    [
+      material(
+        'mothSilkWing',
+        '苔蛾眼斑翅片',
+        0.46,
+        0.032,
+        17,
+        'outfitter',
+        '衣坊按完整眼斑收购，可封入衣襟作纹饰。',
+        2,
+      ),
+      material(
+        'mothAntenna',
+        '苔蛾羽状触角',
+        0.24,
+        0.018,
+        10,
+        'outfitter',
+        '成排的触角栉齿可做纹样摹本。',
+        2,
+      ),
+    ],
+  ],
+  [
+    'gorge',
+    'echoBat',
+    '折耳崖蝠',
+    [
+      material(
+        'batMembrane',
+        '崖蝠指间翼膜',
+        0.54,
+        0.17,
+        18,
+        'outfitter',
+        '薄翼膜带有完整的指骨纹路，衣坊收作轻薄补片。',
+      ),
+      material('batHook', '崖蝠拇钩爪', 0.18, 0.09, 12, 'smith', '短弯钩爪可做衣扣和小工具挂扣。', 2),
+    ],
+  ],
+  [
+    'rain',
     'reedDrake',
     '雾纹溪蜥',
     [
@@ -235,6 +331,12 @@ for (const [zone, species, source, entries] of fauna) {
   }
 }
 export const bossLoot = { rain: 'rainTusk', salt: 'queenPlate', root: 'elderHide', gorge: 'raptorScute' }
+export const nightBossLoot = {
+  rain: 'bellSac',
+  salt: 'sailFang',
+  root: 'mothSilkWing',
+  gorge: 'batMembrane',
+}
 export const workshopRecipes = {
   fieldPack: { zone: 'rain', service: 'outfitter', materials: { oxHide: 2, cloth: 1 } },
   boots: { zone: 'rain', service: 'outfitter', materials: { mireHide: 2, reedSkin: 1 } },

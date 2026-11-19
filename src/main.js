@@ -31,6 +31,19 @@ import { openPack } from './expedition-ui.js'
 import { roomActivity, makePatrol } from './patrol.js'
 import { assetUrl } from './asset-url.js'
 import { crossedPassage } from './passages.js'
+import {
+  medicineTitle,
+  medicineState,
+  acceptCase,
+  caseObjective,
+  deliverCase,
+  ferrySite,
+  pickUpCase,
+  putCaseDown,
+  stepCase,
+} from './medicine.js'
+import { makeFerryScene } from './ferry-scene.js'
+import { avatarPortrait } from './avatar-portraits.js'
 
 const $ = (id) => document.getElementById(id),
   canvas = $('world'),
@@ -44,9 +57,14 @@ const data = readSave(),
 let pack = migrateExpedition(data),
   stats = expeditionStats(pack),
   field = null,
+  ferry = null,
   pin = null,
   bellTime = 0,
   bellStep = 0
+const medicine = medicineState(data, pack)
+const pharmacyStart = new URLSearchParams(location.search).get('quest') === 'medicine'
+let mapHeld = false
+let mapReleaseTime = -Infinity
 let patrol = null,
   roomChoice = 'duel'
 let prefs = { sound: true, quality: 'auto', sensitivity: 1, captions: true }
@@ -103,8 +121,12 @@ const msg = (s, seconds = 3) => {
     feedbackTimer = seconds
   }
 }
+let intentionalUnlock = false
 const escapeLock = () => {
-  if (document.pointerLockElement === canvas) document.exitPointerLock()
+  if (document.pointerLockElement === canvas) {
+    intentionalUnlock = true
+    document.exitPointerLock()
+  }
 }
 function inputFocus() {
   canvas.focus({ preventScroll: true })
@@ -123,6 +145,7 @@ function setPrefs() {
 function save() {
   if (hero && physics && mode === 'play' && !online && !pvpLaunching && hero.f.hp > 0) {
     data.positions[id] = { ...hero.pos, yaw: hero.yaw, pitch: hero.pitch }
+    if (['carried', 'ground', 'floating'].includes(medicine.phase)) medicine.lastZone = id
     data.vitals = { hp: hero.f.hp, stamina: hero.f.stamina }
   }
   writeSave(data)
@@ -145,8 +168,10 @@ function dialog(title, name, content, closable = true) {
 }
 function closeDialog(lock = true) {
   if (panel === 'dead') return
+  if (panel === 'map' && lock) mapReleaseTime = performance.now()
   const cancelRoom = (panel === 'rooms' || panel === 'manual') && !pvpLaunching
   panel = ''
+  mapHeld = false
   dlg.hidden = true
   keys.clear()
   if (cancelRoom) {
@@ -179,6 +204,10 @@ function rolePanel() {
         },
         'roleCard' + (data.role === key ? ' chosen' : ''),
       )
+      const portrait = el('img')
+      portrait.src = avatarPortrait(key, data.skin)
+      portrait.alt = ''
+      choice.prepend(portrait)
       choice.append(el('small', r.skills.join(' · ') + '　｜　' + r.passive))
       add(choice)
     }
@@ -255,7 +284,7 @@ function options() {
       ),
       el(
         'p',
-        'F 格挡，Shift 疾跑，按住 Caps Lock 静步，松开恢复，Ctrl 蹲下。空格跳跃，面对可触及的树节或矮台按住空格攀爬。走入城门光幕自动过境。R 交互，Tab 地图，B 行囊，G 火把，T 手记。',
+        'F 格挡，Shift 疾跑，按住 Caps Lock 静步，松开恢复，Ctrl 蹲下。空格跳跃，面对可触及的树节或矮台按住空格攀爬。走入光幕自动过境。R 交互，按住 Tab 看地图，松开收起，B 行囊，G 火把，T 手记。',
       ),
     )
     if (import.meta.env.PROD && !globalThis.faultlineAssets) {
@@ -270,6 +299,12 @@ function fillAtlas() {
   const b = biomes[id],
     i = ids.indexOf(id)
   $('worldTitle').textContent = b.name
+  $('questStart').hidden = pharmacyStart
+  $('enter').textContent = pharmacyStart
+    ? medicine.lastZone && medicine.phase !== 'done'
+      ? '继续送药委托'
+      : '从回春药铺开始'
+    : '进入世界 · 白砥城'
   $('worldEnglish').textContent = b.english
   $('worldDesc').textContent = b.description
   $('chapter').textContent =
@@ -403,6 +438,115 @@ function storyPanel(task, which = data.tracked, route = 'valve') {
     } else add(btn('记录并继续', () => finish()))
   })
 }
+function questResult(result) {
+  if (result.ok) {
+    syncStats()
+    save()
+    closeDialog()
+  }
+  msg(result.message, 5)
+}
+function medicineDialog(place) {
+  dialog(medicineTitle, 'medicine', () => {
+    if (place === 'pharmacy') {
+      add(el('small', '白砥城 · 药师谢兰心', 'muted'))
+      if (medicine.phase === 'offered') {
+        add(
+          el(
+            'p',
+            '“雨打了一夜，渡棚还有人等这批药。油布裹好了，箱子要留出 4 L。出西门后找红白水尺，渡工任舟在对岸。”',
+          ),
+          btn('接下委托 · 背起药箱', () => {
+            const r = acceptCase(medicine, pack)
+            if (r.ok) {
+              data.tracked = 'medicine'
+              pin = null
+            }
+            questResult(r)
+            if (!r.ok) {
+              const warning = body.querySelector('.caseNotice') || el('p', null, 'caseNotice')
+              warning.textContent = r.message
+              add(warning)
+            }
+          }),
+        )
+      } else
+        add(
+          el(
+            'p',
+            medicine.phase === 'done'
+              ? '“任舟托人捎了回信。渡棚里的药已经用上了。”'
+              : '“看得见水下石脊就能慢慢过；要是没把握，靛蓝布旗引你上高桥。练家衣坊也能帮你把箱带系牢。”',
+          ),
+        )
+    } else if (place === 'fork') {
+      medicine.sawFork = true
+      save()
+      add(
+        el('small', '浅汊渡口 · 红白水尺', 'muted'),
+        el(
+          'p',
+          '水线压过第二道红漆。眼前的灰石脊通向对岸，石头两侧水深。上游靛蓝旗通向高岸木桥，桥面干燥，路要多走一段。你可以随时改道。',
+        ),
+      )
+      for (const [key, title] of [
+        ['ford', '记下浅滩石脊'],
+        ['ridge', '记下高岸木桥'],
+      ])
+        add(
+          btn(title, () => {
+            medicine.prefer = key
+            if (medicine.phase === 'carried') data.tracked = 'medicine'
+            pin = null
+            save()
+            closeDialog()
+            msg(title)
+          }),
+        )
+    } else {
+      add(el('small', '浅汊东岸 · 渡工任舟', 'muted'))
+      if (medicine.phase === 'carried') {
+        add(
+          el(
+            'p',
+            medicine.recovered
+              ? '“系带都湿透了！油布底下还是干的，拿来吧。”'
+              : medicine.route === 'ridge'
+                ? '“靛蓝旗还在？好，今晚的挑夫也能走高桥。”'
+                : '“石脊还过得去吗？我把水位记下来，后面的人也好走。”',
+          ),
+          btn('交付油布药箱', () => {
+            const r = deliverCase(medicine, pack, data, id, hero.pos)
+            if (r.ok) {
+              if (data.tracked === 'medicine') data.tracked = 'main'
+              pin = null
+            }
+            questResult(r)
+            if (!r.ok) add(el('p', r.message))
+          }),
+        )
+      } else if (medicine.phase === 'floating') {
+        add(
+          el('p', '“盯住红系带，水往下游去。追不上就沿岸走，系带会在浅水处卡住。地图上能标出箱子。”'),
+          btn('追踪落水药箱', () => {
+            data.tracked = 'medicine'
+            save()
+            closeDialog()
+          }),
+        )
+      } else
+        add(
+          el(
+            'p',
+            medicine.phase === 'done'
+              ? '“上次你送的药救了急。这里的水沿石嘴转向下游，离主流几步，脚下会稳些。”'
+              : '“白砥城回春药铺还有给渡棚的一箱药，见到谢兰心，就说任舟在这里等。”',
+          ),
+        )
+    }
+    add(btn('告别', () => closeDialog()))
+  })
+}
 function journal() {
   dialog('巡线手记', 'journal', () => {
     const which = data.tracked,
@@ -410,9 +554,18 @@ function journal() {
     const cv = el('canvas', null, 'mapImg')
     add(cv)
     const goal = activeGoal()
-    drawMap(cv, id, hero.pos, view.town.features, goal?.step.hidden ? null : goal?.p)
+    const delivery = data.tracked === 'medicine' ? caseObjective(medicine, id) : null
+    drawMap(
+      cv,
+      id,
+      hero.pos,
+      view.town.features,
+      delivery?.zone === id ? delivery.p : goal?.step.hidden ? null : goal?.p,
+    )
     add(el('p', 'Tab 地图显示城门、边境与前往调查点的道路。', 'muted'), el('h3', '正在追踪'))
-    if (c)
+    if (delivery)
+      add(el('p', medicineTitle + '　｜　' + delivery.title + ' · ' + biomes[delivery.zone].name))
+    else if (c)
       add(
         el(
           'p',
@@ -437,6 +590,29 @@ function journal() {
       ),
     )
     add(el('h3', '当地支线'))
+    if (medicine.phase === 'offered') add(el('p', '雨后的药箱 · 去白砥城回春药铺找谢兰心。'))
+    else if (medicine.phase === 'done')
+      add(
+        el(
+          'p',
+          '雨后的药箱 ✓　' +
+            { ridge: '高岸木桥', ford: '浅滩石脊', bank: '自行寻路' }[medicine.route] +
+            (medicine.recovered ? ' · 追回落水药箱' : ''),
+        ),
+      )
+    else
+      add(
+        btn(
+          '追踪 · ' + medicineTitle,
+          () => {
+            data.tracked = 'medicine'
+            pin = null
+            save()
+            journal()
+          },
+          which === 'medicine' ? 'chosen' : '',
+        ),
+      )
     for (const q of side.filter((s) => s.zone === id)) {
       const s = current(data, q.id)
       const e = btn(
@@ -513,6 +689,7 @@ function rest(h) {
   const elapsed = (h - data.hour + 24) % 24
   const cost = advanceExpedition(pack, elapsed, { activity: 'rest' })
   data.hour = h
+  people.syncClock?.()
   hero.f.hp = Math.max(0, Math.min(100, hero.f.hp + elapsed * 3) - cost.damage)
   hero.f.stamina = 100
   syncStats()
@@ -533,6 +710,23 @@ function speak(a) {
       btn('翻开当地手记', journal),
     )
     const service = a.service || (a.job === '市集商贩' ? 'merchant' : 'resident')
+    if (id === 'capital' && service === 'pharmacy')
+      add(
+        btn(
+          medicineTitle + (medicine.phase === 'offered' ? ' · 接取委托' : ''),
+          () => medicineDialog('pharmacy'),
+          'chosen',
+        ),
+      )
+    if (id === 'capital' && service === 'outfitter' && medicine.phase === 'carried' && !medicine.bound)
+      add(
+        btn('给药箱系背带', () => {
+          medicine.bound = true
+          save()
+          closeDialog()
+          msg('练红系紧背带。落入深水也能护住药箱。', 4)
+        }),
+      )
     if (!a.guard && a.kind !== 'guard') {
       const trading = ['baker', 'butcher', 'merchant', 'smith', 'outfitter', 'inn', 'pharmacy'].includes(
         service,
@@ -613,6 +807,11 @@ function inventory(context = {}) {
   })
 }
 function leaveItem(item, qty, name) {
+  if (item === 'medicineCase') {
+    putCaseDown(medicine, id, hero.pos)
+    data.tracked = 'medicine'
+    return
+  }
   data.field.drops ??= []
   data.field.drops.push({
     kind: 'drop',
@@ -624,17 +823,27 @@ function leaveItem(item, qty, name) {
   })
   field?.drops(data.field.drops)
 }
-function addRemains(item, qty, species, pos) {
-  if (!items[item] || !pos || qty <= 0) return
+function addRemains(parts, species, pos, speciesId) {
+  if (!pos || !parts.length) return
   data.field.drops ??= []
   let lot = data.field.drops.find(
     (d) => d.kind === 'remains' && d.zone === id && d.name === species && length(d, pos) < 0.55,
   )
   if (!lot) {
-    lot = { kind: 'remains', zone: id, name: species, x: pos.x, y: pos.y, z: pos.z, parts: {} }
+    lot = {
+      kind: 'remains',
+      zone: id,
+      name: species,
+      speciesId,
+      x: pos.x,
+      y: pos.y,
+      z: pos.z,
+      parts: {},
+    }
     data.field.drops.push(lot)
   }
-  lot.parts[item] = (lot.parts[item] || 0) + qty
+  for (const { id: item, qty } of parts)
+    if (items[item] && qty > 0) lot.parts[item] = (lot.parts[item] || 0) + qty
   field?.drops(data.field.drops)
   save()
   msg(species + '倒下了，靠近后按 R 取材', 3)
@@ -672,19 +881,57 @@ function mapPanel(local = false) {
     people.all
       .filter((a) => a.service && a.f.hp > 0)
       .map((a) => ({ ...a.pos, name: a.name, job: a.job, service: a.service, actorId: a.id })),
-    people.all.filter((a) => a.boss).map((a) => ({ ...a.home, boss: true, name: a.name })),
+    people.bossMarkers(),
   )
+  if (id === 'rain') {
+    const s = ferrySite()
+    places.push(
+      { ...s.bridge, kind: 'ferry', name: '高岸驿桥' },
+      { ...s.boatman, kind: 'ferry', name: '任舟 · 渡工棚' },
+    )
+  }
+  if (medicine.point && medicine.zone === id)
+    places.push({ ...medicine.point, kind: 'case', name: '朱红系带的药箱' })
   dialog(biomes[id].name + ' · 地图', 'map', () => {
     const cv = el('canvas', null, 'mapImg fullMap')
     add(cv)
     const goal = activeGoal()
-    drawMap(cv, id, hero.pos, places, goal?.step.hidden ? null : goal?.p, { local, yaw: hero.yaw, pin })
+    const delivery = data.tracked === 'medicine' ? caseObjective(medicine, id) : null
+    drawMap(
+      cv,
+      id,
+      hero.pos,
+      places,
+      delivery?.zone === id ? { ...delivery.p, label: '送药' } : goal?.step.hidden ? null : goal?.p,
+      { local, yaw: hero.yaw, pin },
+    )
     add(
       btn(local ? '全境' : '附近街区', () => mapPanel(!local)),
       btn('巡线手记', journal),
       btn('收起地图', () => closeDialog()),
     )
-    add(el('p', '白色箭头为当前位置。选择地点可在罗盘旁追踪方向。', 'muted'))
+    add(
+      el(
+        'p',
+        (mapHeld ? '松开 Tab 返回。' : '') + '白色箭头是你。选择地点可追踪方向，附近视图显示街区细节。',
+        'muted',
+      ),
+    )
+    const boss = places.find((p) => p.boss)
+    if (boss)
+      add(
+        el(
+          'p',
+          (boss.phase === 'night' ? '夜行' : '昼行') +
+            '首领 · ' +
+            boss.name +
+            '　｜　' +
+            boss.lair +
+            '。' +
+            boss.tactic,
+          'mapBoss',
+        ),
+      )
     const points = [
       ...gates(id),
       ...(id === 'capital'
@@ -704,8 +951,11 @@ function mapPanel(local = false) {
                 'pharmacy',
               ].includes(p.service),
           )
-        : places.filter((p) => p.boss || ['well', 'inn', 'habitat', 'shore'].includes(p.kind))),
+        : places.filter(
+            (p) => p.boss || ['well', 'inn', 'habitat', 'shore', 'ferry', 'case'].includes(p.kind),
+          )),
     ]
+    if (id === 'capital') points.push(...places.filter((p) => p.kind === 'case'))
     for (const p of points) {
       const shop = {
         smith: '鸣铁铸坊',
@@ -722,7 +972,8 @@ function mapPanel(local = false) {
       add(
         btn(title, () => {
           pin = { ...p, name: title }
-          closeDialog()
+          if (!mapHeld) closeDialog()
+          else mapPanel(local)
           msg('已标记 ' + title)
         }),
       )
@@ -760,6 +1011,18 @@ function candidates() {
       if (d <= max) out.push({ title, d, run })
     }
   if (goal?.p) addItem(goal.p, goal.step.label, () => storyPanel(goal), 3.3)
+  if (id === 'rain') {
+    const s = ferrySite()
+    addItem(s.fork, '查看渡口水尺与两条路线', () => medicineDialog('fork'), 4.2)
+    addItem(s.boatman, '与渡工任舟交谈', () => medicineDialog('boatman'), 4.5)
+  }
+  if (medicine.point && medicine.zone === id)
+    addItem(
+      medicine.point,
+      medicine.phase === 'floating' ? '捞回油布药箱' : '背起放下的药箱',
+      () => questResult(pickUpCase(medicine, pack)),
+      3.5,
+    )
   if (patrol && !patrol.done && id === 'rain') {
     addItem(poi.watch, '双岗联测 · 高台报声', () => patrol.interact('tower'), 4.5)
     addItem(poi.oldValve, '双岗联测 · 废闸核验', () => patrol.interact('valve'), 4.5)
@@ -775,10 +1038,6 @@ function candidates() {
     switch (p.kind) {
       case 'brine':
         addItem(p, p.name, () => msg('岸上凝着盐霜。饮水可到白盐城的石井补给。', 4))
-        break
-      case 'border':
-        if (id === 'capital' || p.to === 'capital') break
-        addItem(p, p.name + ' · 前往' + biomes[p.to].name, () => cross(p), 6.5)
         break
       case 'well':
       case 'fire':
@@ -992,16 +1251,27 @@ function events() {
       audio.note(480, 335, 0.28, 0.21, 'triangle')
     },
     loot(item, qty, name, pos) {
-      addRemains(item, qty, name, pos || hero.pos)
+      addRemains([{ id: item, qty }], name, pos || hero.pos)
+    },
+    harvest(parts, name, pos, speciesId) {
+      addRemains(parts, name, pos, speciesId)
     },
   }
 }
-async function enter(link = null, crossing = null) {
+async function enter(link = null, crossing = null, startAtPharmacy = false) {
   if (entering || !view) return
   entering = true
   const n = ++requestId
   const previous = crossing ? hero?.f : null
-  if (!link) id = crossing?.to || 'capital'
+  const fromGuide =
+    startAtPharmacy && !link && !crossing && !pvpLaunching && ['atlas', 'survey'].includes(mode)
+  const savedZone = medicine.lastZone
+  const resume =
+    fromGuide &&
+    ['carried', 'ground', 'floating'].includes(medicine.phase) &&
+    ids.includes(savedZone) &&
+    data.positions[savedZone]
+  if (!link) id = crossing?.to || (resume ? savedZone : 'capital')
   pin = null
   mode = 'loading'
   wake()
@@ -1010,6 +1280,8 @@ async function enter(link = null, crossing = null) {
   await paint()
   try {
     patrol?.detach()
+    ferry?.dispose()
+    ferry = null
     field?.dispose()
     field = null
     people?.dispose()
@@ -1021,14 +1293,23 @@ async function enter(link = null, crossing = null) {
       loadedId = id
     }
     const b = biomes[id],
-      s = crossing ? entryAt(id, crossing.from) : null,
+      s = crossing
+        ? entryAt(id, crossing.from)
+        : resume
+          ? data.positions[savedZone]
+          : fromGuide && id === 'capital'
+            ? { x: 54.7, y: heightAt(id, 54.7, -21.6), z: -21.6, yaw: -Math.PI / 2 }
+            : null,
       origin = { x: b.spawn[0], y: heightAt(id, ...b.spawn), z: b.spawn[1] },
       p = s && ['x', 'y', 'z'].every((k) => Number.isFinite(s[k])) ? s : origin
-    if (!link) field = makeField(view.scene, id, view.town, data)
+    if (!link) {
+      field = makeField(view.scene, id, view.town, data)
+      ferry = makeFerryScene(view.scene, id)
+    }
     physics = await makePhysics(
       view.land.ground,
       view.land.solids,
-      [...view.town.colliders, ...(field?.structures || [])],
+      [...view.town.colliders, ...(field?.structures || []), ...(ferry?.structures || [])],
       p,
       id === 'capital' ? 220.3 : b.radius,
     )
@@ -1045,12 +1326,14 @@ async function enter(link = null, crossing = null) {
       yaw: s?.yaw || 0,
       pitch: s?.pitch || 0,
       f: fighter(char),
+      skin: data.skin,
       color: skins[data.skin] || roles[char].color,
       crouch: false,
       quiet: false,
       noise: 0,
       grip: null,
     }
+    view.setAvatar(char, data.skin)
     if (!link) {
       const vitals = previous || data.vitals
       if (vitals && Number.isFinite(vitals.hp)) hero.f.hp = Math.max(1, Math.min(100, vitals.hp))
@@ -1071,7 +1354,10 @@ async function enter(link = null, crossing = null) {
     if (link) {
       online = match(link, hero, view, physics, (s) => msg(s, 4))
     } else {
-      people = makePeople(view, id, physics, hero, events())
+      people = makePeople(view, id, physics, hero, events(), {
+        field: data.field,
+        clock: () => ({ hour: data.hour, elapsed: pack.elapsed }),
+      })
       if (!data.visited.includes(id)) data.visited.push(id)
       save()
     }
@@ -1088,7 +1374,11 @@ async function enter(link = null, crossing = null) {
         ? '正在同步房间'
         : crossing
           ? '已越过边境 · ' + gates(id).find((g) => g.to === crossing.from)?.name
-          : '白砥城 · Tab 查看四门驿道，B 打开行囊',
+          : resume
+            ? '已续上送药行程 · 按 T 查看手记'
+            : fromGuide && medicine.phase === 'offered'
+              ? '回春药铺 · 靠近谢兰心，按 R 交谈'
+              : '白砥城 · 按住 Tab 查看四门驿道，B 打开行囊',
       4,
     )
     last = performance.now()
@@ -1101,9 +1391,9 @@ async function enter(link = null, crossing = null) {
     loading(false)
   }
 }
-async function cross(g, throughGate = false) {
-  if (entering || online || mode !== 'play' || (!throughGate && length(hero.pos, g) > 6.55)) return
-  if (throughGate) audio.note(280, 510, 0.42, 0.12, 'sine')
+async function cross(g) {
+  if (entering || online || mode !== 'play') return
+  audio.note(280, 510, 0.42, 0.12, 'sine')
   save()
   duelQuest = null
   await enter(null, { from: id, to: g.to })
@@ -1126,6 +1416,8 @@ function toAtlas() {
   people = null
   field?.dispose()
   field = null
+  ferry?.dispose()
+  ferry = null
   physics?.dispose()
   physics = null
   hero = null
@@ -1159,7 +1451,8 @@ function action(key) {
     if (key === 'v') msg('绝技回响　' + Math.floor(hero.f.charge) + '%', 1)
     return
   }
-  view.punch()
+  view.punch(spec)
+  patrol?.gesture?.(spec.key)
   audio.note(spec.shot ? 385 : 132, spec.shot ? 115 : 58, 0.12, 0.13, 'triangle')
   const hits = people.strike(spec)
   if (!hits) msg(spec.name, 0.65)
@@ -1262,11 +1555,19 @@ function update(dt) {
   if (!online && active) {
     const gate = crossedPassage(field.portals, p, hero.pos)
     if (gate) {
-      void cross(gate, true)
+      void cross(gate)
       return
     }
   }
   hero.swimming = swimming
+  if (!online) {
+    const notice = stepCase(medicine, pack, id, hero.pos, swimming, dt)
+    if (notice) {
+      syncStats()
+      save()
+      msg(notice, 6)
+    }
+  }
   hero.wading = wading
   hero.immersion = immersion
   hero.waterVelocity = { x: (hero.pos.x - p.x) / dt, z: (hero.pos.z - p.z) / dt }
@@ -1325,7 +1626,7 @@ function update(dt) {
       }
     }
     echo(dt)
-    people.update(dt, data.hour < 6 || data.hour > 18)
+    people.update(dt, data.hour < 6 || data.hour >= 18)
     saveTimer += dt
     if (saveTimer > 4) {
       saveTimer = 0
@@ -1436,15 +1737,34 @@ function ui() {
   const goal = activeGoal(),
     currentTask = current(data)
   if (pin?.actorId) {
-    const actor = people.all.find((a) => a.id === pin.actorId)
+    const actor = people.all.find((a) => a.id === pin.actorId && a.f.hp > 0)
     if (actor) Object.assign(pin, actor.pos)
+    else pin = null
+  }
+  if (pin?.kind === 'case') {
+    if (medicine.zone === id && medicine.point) Object.assign(pin, medicine.point)
+    else pin = null
   }
   if (people.training)
     tr.append(
       el('b', '人机切磋'),
       el('span', people.training.name + '　' + Math.ceil(people.training.f.hp) + ' HP'),
     )
-  else if (currentTask) {
+  else if (data.tracked === 'medicine' && caseObjective(medicine, id)) {
+    const objective = caseObjective(medicine, id),
+      target = objective.zone === id ? objective.p : nextGate(id, objective.zone)
+    tr.append(el('b', medicineTitle), el('span', objective.title))
+    if (target)
+      tr.append(
+        el(
+          'div',
+          (objective.zone === id ? '' : '经' + target.name + ' · ') +
+            Math.round(length(p, target)) +
+            ' m　' +
+            pointDirection(p, target),
+        ),
+      )
+  } else if (currentTask) {
     tr.append(
       el('b', currentTask.q.name),
       el('span', currentTask.step.hidden ? '寻访线索' : currentTask.step.label),
@@ -1539,6 +1859,7 @@ function frame(ts) {
       hero.waterVelocity,
       Math.min(1, (hero.immersion || 0) / 0.6),
     )
+    ferry?.update(medicine, time, panel ? 0 : dt, hero.pos)
     const day = view.render(dt, online ? 10 : data.hour, time)
     field?.update(dt, time, day, view.camera)
     patrol?.update(dt)
@@ -1679,11 +2000,11 @@ $('hotbar').onclick = (e) => {
   if (cell) action(['q', 'e', 'c', 'v'][Array.from($('hotbar').children).indexOf(cell)])
 }
 document.addEventListener('keydown', (e) => {
-  if (mode === 'play' && !online && e.code === 'Tab' && !e.shiftKey && (!panel || panel === 'map')) {
+  if (mode === 'play' && !online && e.code === 'Tab' && (!panel || mapHeld)) {
     e.preventDefault()
-    if (!e.repeat) {
-      if (panel) closeDialog()
-      else mapPanel()
+    if (!e.repeat && !panel) {
+      mapHeld = true
+      mapPanel()
     }
     return
   }
@@ -1730,6 +2051,12 @@ document.addEventListener('keydown', (e) => {
   if (['KeyQ', 'KeyE', 'KeyC', 'KeyV'].includes(e.code)) action(e.code.slice(3).toLowerCase())
 })
 document.addEventListener('keyup', (e) => {
+  if (e.code === 'Tab' && mapHeld) {
+    e.preventDefault()
+    mapHeld = false
+    if (panel === 'map') closeDialog()
+    return
+  }
   keys.delete(e.code)
   if (hero && e.code === 'CapsLock') hero.quiet = false
   if (hero && mode === 'play' && !panel && e.code.startsWith('Control') && hero.ctrlStart) {
@@ -1738,12 +2065,32 @@ document.addEventListener('keyup', (e) => {
   }
 })
 window.addEventListener('blur', () => {
+  if (mapHeld && panel === 'map') closeDialog(false)
   keys.clear()
   if (hero) hero.quiet = false
   dragging = false
   if (mode === 'play' && !panel && !online && !patrol) pause()
 })
 document.addEventListener('pointerlockchange', () => {
+  // A tap can release Tab before the browser finishes unlocking for the map.
+  // Reconcile that delayed event with the already-visible game.
+  if (
+    !document.pointerLockElement &&
+    !panel &&
+    mode === 'play' &&
+    performance.now() - mapReleaseTime < 600 &&
+    document.hasFocus()
+  ) {
+    intentionalUnlock = false
+    requestAnimationFrame(() => {
+      if (!panel && mode === 'play' && !document.pointerLockElement) inputFocus()
+    })
+    return
+  }
+  if (intentionalUnlock) {
+    intentionalUnlock = false
+    if (!document.pointerLockElement) return
+  }
   if (!document.pointerLockElement && mode === 'play' && !panel && !entering && !online && !patrol)
     pause()
 })
@@ -1778,7 +2125,7 @@ async function linked(link) {
       }
       patrol = makePatrol(
         link,
-        () => ({ view, hero, id, data, poi }),
+        () => ({ view, hero, id, data, poi, physics }),
         msg,
         () => {
           if (!data.items.includes('双岗巡线章')) data.items.push('双岗巡线章')
@@ -1913,7 +2260,8 @@ function manual(host) {
     )
   })
 }
-$('enter').onclick = () => enter()
+$('enter').onclick = () => enter(null, null, pharmacyStart)
+$('questStart').onclick = () => enter(null, null, true)
 $('roleButton').onclick = rolePanel
 $('atlasMode').onclick = () => {
   closeDialog(false)

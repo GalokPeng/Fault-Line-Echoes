@@ -1,5 +1,8 @@
 import * as THREE from 'three'
 import { tradePoses } from './capital-trade-poses.js'
+import { avatarLook, gestureFor } from './avatar.js'
+import { torsoDetails, headDetails, wristDetails } from './avatar-tailor.js'
+import { nightCreature } from './perception-night-models.js'
 import { Batch, beam, shape, releaseGeometry } from './settlement-geometry.js'
 
 const material = new THREE.MeshStandardMaterial({
@@ -35,8 +38,6 @@ const palettes = {
   gorge: ['#975749', '#d6b889', '#384954'],
 }
 const hide = '#413526',
-  skin = '#ac7857',
-  skinLight = '#bd8764',
   iron = '#59666a'
 const shadowMaterial = (() => {
   const n = 32,
@@ -77,9 +78,14 @@ function buildPart(parent, origin, draw) {
   batch.finish()
   return group
 }
-function person(group, kind, id, color) {
-  const [regionCoat, trim, trousers] = palettes[id] || palettes.rain
-  const coat = color || regionCoat,
+function person(group, kind, id, color, look) {
+  const [regionCoat, regionTrim, regionTrousers] = palettes[id] || palettes.rain
+  const coat = look?.coat || color || regionCoat,
+    trim = look?.trim || regionTrim,
+    trousers = look?.trousers || regionTrousers,
+    skin = look?.flesh || '#ac7857',
+    skinLight = look?.flesh || '#bd8764',
+    hair = look?.hair || hide,
     guard = kind === 'guard'
   const torso = buildPart(group, [0, 0.83, 0], (p) => {
     p.cone(coat, 0, 0.21, 0, 0.245, 0.49, 0.16, 0.94, 0.85, 10)
@@ -92,18 +98,24 @@ function person(group, kind, id, color) {
     p.block(trousers, 0, 0.24, -0.147, 0.26, 0.34, 0.12, [-0.04, 0, 0])
     p.block(trim, 0, 0.23, -0.207, 0.18, 0.025, 0.013)
     p.cone(skin, 0, 0.48, 0, 0.079, 0.16, 0.078)
+    if (look) torsoDetails(p, look)
   })
   const head = buildPart(torso, [0, 0.63, 0.005], (p) => {
     p.ball(skin, 0.0, 0, 0.0, 0.137, 0.178, 0.122)
     p.ball(skinLight, 0, -0.008, 0.118, 0.028, 0.043, 0.032)
+    if (look) {
+      p.rod('#83594c', [-0.034, -0.066, 0.11], [0.031, -0.064, 0.111], 0.005)
+      for (const side of [-1, 1]) p.ball('#e1c7ae', side * 0.053, 0.024, 0.113, 0.019, 0.009, 0.008)
+    }
     for (const s of [-1, 1]) {
       p.ball(skin, s * 0.132, -0.012, 0, 0.028, 0.049, 0.027)
       p.block('#33302c', s * 0.055, 0.024, 0.108, 0.034, 0.012, 0.012)
       p.block(hide, s * 0.056, 0.048, 0.105, 0.042, 0.012, 0.014, [0, 0, s * 0.1])
     }
-    p.ball(hide, 0, 0.089, -0.006, 0.142, 0.102, 0.128)
-    p.ball(hide, 0, 0.01, -0.092, 0.124, 0.1, 0.051)
-    if (guard) {
+    p.ball(hair, 0, 0.089, -0.006, 0.142, 0.102, 0.128)
+    p.ball(hair, 0, 0.01, -0.092, 0.124, 0.1, 0.051)
+    if (look) headDetails(p, look)
+    else if (guard) {
       p.cone(iron, 0, 0.09, 0, 0.16, 0.12, 0.146, 0.72, 1, 10)
       p.cone('#869293', 0, 0.05, 0, 0.174, 0.023, 0.159, 0.94, 1, 12)
       p.block(trim, 0, 0.169, -0.018, 0.046, 0.064, 0.125)
@@ -139,6 +151,20 @@ function person(group, kind, id, color) {
           [-0.2, 0, 0],
         )
         p.ball(skinLight, s * 0.073, -0.442, 0.047, 0.056, 0.074, 0.046)
+        if (look) {
+          wristDetails(p, look, s)
+          if (look.role === 'tide' || look.role === 'beam') {
+            for (let j = 0; j < 4; j++) {
+              const x = s * 0.073 + (j - 1.5) * 0.022
+              p.rod(
+                skinLight,
+                [x, -0.463, 0.071],
+                [x + (j - 1.5) * 0.008, -0.52 + (j === 3 ? 0.015 : 0), 0.087],
+                0.011,
+              )
+            }
+          }
+        }
       }),
     )
     legs.push(
@@ -150,7 +176,7 @@ function person(group, kind, id, color) {
       }),
     )
   }
-  const pose = (phase, walk, strike, t, tell = 0) => {
+  const pose = (phase, walk, strike, t, tell = 0, movement = '') => {
     torso.position.y = 0.83 + Math.abs(Math.sin(phase)) * 0.034 * walk + Math.sin(t * 2) * 0.006
     torso.rotation.y = Math.sin(phase) * 0.055 * walk + Math.sin(strike * Math.PI) * 0.16
     torso.rotation.x = -tell * 0.14
@@ -161,12 +187,29 @@ function person(group, kind, id, color) {
         -Math.sin(phase + i * Math.PI) * 0.45 * walk -
         (i === 1 ? 1.5 : 0.71) * Math.sin(Math.PI * strike) -
         tell * (i ? 1.05 : 0.48)
+      if (look) {
+        const side = i ? 1 : -1,
+          pulse = Math.sin(strike * Math.PI)
+        const open = ['palm', 'sweep', 'double', 'edge', 'lance', 'volley', 'press'].includes(movement)
+        limb.rotation.z =
+          side *
+          ((look.role === 'stone' ? 0.16 : 0.09) +
+            (movement === 'sweep' ? 0.82 : movement === 'edge' ? 0.51 : 0.17) * pulse)
+        limb.rotation.y = side * (open ? 0.43 : 0.15) * pulse
+        limb.rotation.x -= look.role === 'tide' ? 0.27 : look.role === 'stone' ? 0.16 : 0
+        limb.rotation.x -= open ? (i ? 0.24 : 0.86) * pulse : 0
+        if (movement === 'guard' || (movement === 'brace' && pulse > 0.04)) {
+          limb.rotation.x -= 0.79
+          limb.rotation.z = side * 0.53
+        }
+      }
     })
   }
   if (id === 'capital' && kind === 'resident') pose.trade = tradePoses(buildPart, torso, head, arms)
   return pose
 }
 function creature(group, id, species = {}) {
+  if (species.phase === 'night') return nightCreature(buildPart, group, species)
   const form = species.form || { rain: 'drake', salt: 'scorpion', root: 'boar', gorge: 'bird' }[id]
   const salt = form === 'scorpion',
     root = ['boar', 'hart', 'ram', 'ox'].includes(form),
@@ -548,13 +591,27 @@ export function createActor(kind, id, color) {
   const body = new THREE.Group()
   body.userData.animal = beast
   group.add(body)
-  const animate = beast ? creature(body, id, species) : person(body, kind, id, color)
+  const look = ['player', 'duelist'].includes(kind)
+    ? avatarLook(color?.role, color?.skin || color)
+    : null
+  if (look) {
+    body.scale.x = look.width
+    group.userData.avatar = look
+  }
+  const animate = beast ? creature(body, id, species) : person(body, kind, id, look ? null : color, look)
   let phase = Math.random() * Math.PI * 2,
     weight = 0,
     elapsed = 0,
-    strike = 1
+    strike = 1,
+    gesture = ''
   return {
     group,
+    perform(key) {
+      if (look) {
+        gesture = gestureFor(look.role, key)
+        strike = 0
+      }
+    },
     setWork(action, onImpact) {
       animate.trade?.set(action, onImpact)
     },
@@ -583,7 +640,7 @@ export function createActor(kind, id, color) {
         strike,
         Number.isFinite(time) ? time : elapsed,
         windup ? Math.min(1, 0.19 + windup.progress * 1.15) : 0,
-        windup?.type,
+        look ? windup?.type || gesture : windup?.type,
       )
       animate.trade?.update(dt, moving, attacking || Boolean(windup))
     },

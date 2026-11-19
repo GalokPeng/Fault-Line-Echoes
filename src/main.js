@@ -1730,7 +1730,11 @@ function ui() {
   const tr = $('tracker')
   tr.replaceChildren()
   if (online) {
-    tr.append(el('b', '双人切磋'), el('span', online.score.join(' / ')))
+    tr.append(
+      el('b', '双人切磋'),
+      el('span', online.score.join(' / ')),
+      el('div', room?.transport === 'server' ? '服务器中转' : '点对点直连'),
+    )
     $('prompt').textContent = ''
     return
   }
@@ -1805,7 +1809,10 @@ function ui() {
         'div',
         patrol.done
           ? '双岗联测已完成'
-          : '合作巡线 · ' + (patrol.other ? biomes[patrol.other.zone].name : '等候同伴'),
+          : '合作巡线 · ' +
+              (patrol.other ? biomes[patrol.other.zone].name : '等候同伴') +
+              ' · ' +
+              (room?.transport === 'server' ? '服务器中转' : '直连'),
       ),
     )
   const list = candidates(),
@@ -2109,6 +2116,7 @@ function endSurvey() {
 function unavailable(reason) {
   const was = online || patrol
   if (was && mode === 'play') toAtlas()
+  room = null
   if (panel === 'rooms' || panel === 'manual' || was)
     dialog('联机房间', 'rooms', () => add(el('p', reason), btn('返回联机选项', rooms)))
 }
@@ -2173,17 +2181,47 @@ function rooms() {
     const input = el('input')
     input.placeholder = '六位房号'
     input.maxLength = 6
+    input.value = (new URLSearchParams(location.search).get('room') || '').toUpperCase().slice(0, 6)
     input.setAttribute('aria-label', '房号')
     const status = el('p', '', 'muted')
-    const start = async (invite) => {
+    const start = (invite) => {
       room?.close?.()
-      rooms()
-      const note = el('p', '正在联系信令服务…')
-      add(note)
+      room = null
+      const note = el('p', invite ? '正在加入好友的房间…' : '正在分配六位房号…')
+      note.setAttribute('role', 'status')
+      let code
+      const share = btn('复制邀请链接', async () => {
+        const url = new URL(location.href)
+        url.search = ''
+        url.hash = ''
+        url.searchParams.set('room', code)
+        try {
+          await navigator.clipboard.writeText(url.href)
+          note.textContent = '房号　' + code + '　｜　邀请链接已复制，请发给好友'
+        } catch {
+          const box = el('input')
+          box.value = url.href
+          box.readOnly = true
+          add(box)
+          box.select()
+        }
+      })
+      share.hidden = true
+      dialog('联机房间', 'rooms', () =>
+        add(
+          note,
+          share,
+          btn('取消', () => closeDialog(false)),
+        ),
+      )
       try {
-        room = await connectRoom(
+        room = connectRoom(
           invite,
-          (number, text) => (note.textContent = '房号　' + number + '　｜　' + text),
+          (number, text) => {
+            code = number
+            share.hidden = !!invite
+            note.textContent = '房号　' + number + '　｜　' + text
+          },
           linked,
           unavailable,
         )
@@ -2191,10 +2229,13 @@ function rooms() {
         note.textContent = e.message
       }
     }
-    if (location.protocol === 'file:')
-      add(el('p', '六位房号由网页版提供。在本地文件中可用下方的手动直连。'))
-    else
+    if (location.protocol === 'file:') {
+      const web = el('a', '打开正式站远程联机')
+      web.href = 'https://fault-line-echoes.vercel.app/?multiplayer=1'
+      add(el('p', '六位房号和服务器中转由正式站提供。'), web)
+    } else
       add(
+        el('p', '房主创建后把房号或邀请链接发给好友。双方保留游戏页面，接通后会自动入场。', 'muted'),
         btn('创建房间', () => start(null)),
         input,
         btn('加入房间', () => {
@@ -2292,6 +2333,12 @@ try {
   view = makeView(canvas, prefs.quality)
   await select(id)
   loadedId = id
+  if (
+    location.protocol !== 'file:' &&
+    (new URLSearchParams(location.search).has('room') ||
+      new URLSearchParams(location.search).has('multiplayer'))
+  )
+    rooms()
   requestAnimationFrame(frame)
 } catch (e) {
   fail(e)

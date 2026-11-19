@@ -1,4 +1,5 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto'
+import { relayRoom } from './room-relay.js'
 const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 const ttl = 180
 function validDescription(value, type) {
@@ -24,16 +25,18 @@ export function localCache() {
       map.delete(k)
       return null
     },
-    async set(k, value) {
+    async set(k, value, options = {}) {
       if (map.size > 1600) {
         for (const [id, v] of map) if (v.expires < Date.now()) map.delete(id)
         if (map.size > 1600) map.delete(map.keys().next().value)
       }
-      map.set(k, { value, expires: Date.now() + ttl * 1000 })
+      map.set(k, { value, expires: Date.now() + (options.ttl || ttl) * 1000 })
     },
   }
 }
 export async function signaling(cache, input) {
+  if (['reserve', 'knock', 'seat', 'cancel', 'exchange', 'ice', 'leave'].includes(input?.op))
+    return relayRoom(cache, input, validDescription)
   const { op, room, key, offer, answer } = input || {},
     ok = (v) => [200, v],
     error = (status, message) => [status, { error: message }]
@@ -54,6 +57,7 @@ export async function signaling(cache, input) {
     return error(400, '房号为六位字母或数字')
   const record = await cache.get('invite-' + room)
   if (!record) return error(404, '房间不存在或已过期')
+  if (record.version === 2) return error(409, '请刷新游戏，使用新版六位房号联机')
   if (op === 'poll') {
     if (
       typeof key !== 'string' ||

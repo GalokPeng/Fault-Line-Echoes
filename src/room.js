@@ -1,83 +1,9 @@
 import { fighter, recover, cast, hurt, rewardHit, heading, sight, roles, attackStyle } from './combat.js'
 import { avatarLook, actionKeys } from './avatar.js'
 import { launchVolley, advanceFlight, flightDisplay } from './perception-flight.js'
-export async function connectRoom(invite, onStatus, onOpen, onClose) {
-  const host = !invite
-  let active = true,
-    timer = 0
-  const controller = new AbortController()
-  const wire = manualRoom(
-    host,
-    (link) => {
-      clearTimeout(timer)
-      if (active) onOpen(link)
-    },
-    (reason) => {
-      if (active) {
-        active = false
-        clearTimeout(timer)
-        controller.abort()
-        onClose(reason)
-      }
-    },
-  )
-  const close = () => {
-    if (active) wire.close()
-  }
-  async function api(op, fields, retries = op === 'create' ? 0 : 4) {
-    const response = await fetch('/api/rooms', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ op, ...fields }),
-      signal: controller.signal,
-    })
-    if (!response.headers.get('content-type')?.includes('json'))
-      throw Error('当前静态站点可使用手动直连')
-    const data = await response.json()
-    // A freshly written invitation can take a moment to become visible to another invocation.
-    if (active && retries > 0 && [404, 502, 503, 504].includes(response.status)) {
-      await new Promise((resolve) => setTimeout(resolve, 700 + (4 - retries) * 300))
-      return api(op, fields, retries - 1)
-    }
-    if (!response.ok) throw Error(data.error || '房间服务暂时不可用')
-    return data
-  }
-  async function start() {
-    if (host) {
-      const offer = await wire.makeLocal()
-      if (!active) return
-      const { room, key } = await api('create', { offer })
-      onStatus(room, '等待另一名行者加入')
-      const expires = Date.now() + 160000
-      async function poll() {
-        if (!active) return
-        try {
-          if (Date.now() > expires) throw Error('房号已过期，请重新创建')
-          const { answer } = await api('poll', { room, key })
-          if (answer) {
-            onStatus(room, '正在建立点对点连接')
-            await wire.take(answer)
-            return
-          }
-          timer = setTimeout(poll, 1850)
-        } catch (e) {
-          if (active) wire.close(e.message)
-        }
-      }
-      await poll()
-    } else {
-      const room = invite.trim().toUpperCase(),
-        { offer } = await api('join', { room })
-      onStatus(room, '正在连接房主')
-      await wire.take(offer)
-      const answer = await wire.makeLocal()
-      if (active) await api('answer', { room, answer })
-    }
-  }
-  start().catch((e) => {
-    if (active) wire.close(e.message)
-  })
-  return { close }
+import { numberedRoom } from './room-transport.js'
+export function connectRoom(invite, onStatus, onOpen, onClose) {
+  return numberedRoom(invite, onStatus, onOpen, onClose, manualRoom)
 }
 const ice = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
 export function manualRoom(host, onOpen, onClose) {
@@ -109,7 +35,8 @@ export function manualRoom(host, onOpen, onClose) {
   if (host) attach(pc.createDataChannel('faultline'))
   else pc.ondatachannel = (e) => attach(e.channel)
   pc.onconnectionstatechange = () => {
-    if (pc.connectionState === 'failed') close('直连失败，请检查两端网络')
+    if (pc.connectionState === 'failed')
+      close('手动直连未接通。双方打开正式网页版，使用六位房号即可通过服务器联机。')
   }
   async function makeLocal() {
     await pc.setLocalDescription(host ? await pc.createOffer() : await pc.createAnswer())
@@ -322,7 +249,7 @@ export function match(link, hero, view, physics, onEvent) {
     }
     if (m.type === 'move' && Array.isArray(m.p) && m.p.length === 5 && m.p.every(Number.isFinite)) {
       const now = performance.now(),
-        dt = Math.min(0.35, Math.max(0.015, (now - recvTime) / 1000))
+        dt = Math.min(link.transport === 'server' ? 2 : 0.35, Math.max(0.015, (now - recvTime) / 1000))
       recvTime = now
       const [x, y, z, yaw, pitch] = m.p,
         d = Math.hypot(x - foe.pos.x, z - foe.pos.z),

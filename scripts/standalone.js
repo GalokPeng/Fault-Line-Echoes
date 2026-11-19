@@ -56,6 +56,10 @@ const standalone = html
   )
 await mkdir(source('dist/'), { recursive: true })
 await writeFile(source('dist/faultline-local.html'), standalone)
+if (process.argv.includes('--snapshot')) {
+  await mkdir(source('play/'), { recursive: true })
+  await writeFile(source('play/faultline-local.html'), standalone)
+}
 console.log(
   'Created dist/faultline-local.html (' + (Buffer.byteLength(standalone) / 1048576).toFixed(1) + ' MiB)',
 )

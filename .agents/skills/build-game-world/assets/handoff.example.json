@@ -1,0 +1,27 @@
+{
+  "credit": "Name of the artist or studio",
+  "license": "License or written terms permitting distribution",
+  "assets": [
+    {
+      "id": "courier-coat",
+      "kind": "character",
+      "file": "models/courier.glb",
+      "role": "storm-courier",
+      "skin": "raincoat",
+      "nodes": ["Hand.L"],
+      "clips": ["Idle", "Walk", "Signal"],
+      "notes": "One unit is one metre; upright +Y; faces +Z. In-place movement. Use third-person rig."
+    },
+    {
+      "id": "signal-bloom",
+      "kind": "vfx",
+      "file": "fx/signal.png",
+      "role": "storm-courier",
+      "action": "signal",
+      "event": "release",
+      "anchor": "Hand.L",
+      "durationSeconds": 0.5,
+      "notes": "Four columns by two rows, row-major, 16 fps. Straight alpha. Tint cyan when lit."
+    }
+  ]
+}

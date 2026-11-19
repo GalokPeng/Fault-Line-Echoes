@@ -1,95 +1,143 @@
-# 断层回声 · Fault Line Echoes
+<h1 align="center"><img src="public/sigil.svg" width="34" alt=""> Fault Line Echoes</h1>
 
-[进入四境世界志，直接游玩](https://fault-line-echoes.vercel.app/)
+<p align="center">An original first-person browser adventure and an installable agent skill for building a game world of your own.</p>
 
-一场发生在断层盆地的第一人称冒险。巡线员听见了本该沉寂的第三声闸响，沿着水路寻找下游的居民。首页可以预览五地的三维场景。点击「进入主城」从白砥城广场出发。按住 Tab 查看地图并标记城门、商铺或野外地标，松开收起，步行穿过城门的动态光幕即抵达对应边境。四境边缘共有八座关门。往返主城或通行相邻野外地图都可直接穿过光幕。
+<p align="center"><a href="README.zh-CN.md">中文版</a> · <a href="https://fault-line-echoes.vercel.app/">Play the game</a> · <a href="https://fault-line-echoes.vercel.app/world-skill.html">Get the skill</a> · <a href="https://fault-line-echoes.vercel.app/faultline-local.html">Single-file game</a></p>
 
-| 出城方向 | 抵达的边境 | 沿途目的地 |
+![The Alabaster Crown, the starting city in Fault Line Echoes](public/atlas/capital.webp)
+
+## Build your own game with the skill
+
+Tell the agent **what the player does, which choice is difficult and what changes afterward**. You can speak English or Chinese. The agent asks about decisions that affect play, picks the technical approach, builds a working version and tests it. Your world gets its own geography, characters and story. A puzzle about allocating power can start with a switch and a meter; it doesn't need the systems of a first-person adventure.
+
+**Install.** Open the bilingual guide, choose **Download the skill**, unzip it and put the entire `build-game-world` folder in **`.agents/skills/`** inside your game project. Open that project in a new Codex chat and type `$build-game-world` followed by your idea. If you cloned this repository, the skill is already in the project. The guide is a single HTML file: save it locally and it can still generate prompts and extract the complete installable ZIP offline. [Interactive guide](https://fault-line-echoes.vercel.app/world-skill.html) · [Skill source](.agents/skills/build-game-world/SKILL.md) · [Portable guide in Git](public/world-skill.html)
+
+The first design choice is how people will play. If you've specified it, the agent can begin immediately.
+
+| Choose | What your players get |
+| --- | --- |
+| Single HTML | One file they can double-click. Solo play works offline with the code, art and physics included. Share a new file when you update it. |
+| Online link | Players visit a URL and receive updates on refresh. A solo game can use static hosting. Remote friends need a reachable room service to play together. |
+| Both | The same rules power an offline solo game and a hosted edition. Players who want rooms can open the online link. |
+
+### Prompts you can actually playtest
+
+**An original small game**
+
+> $build-game-world — Make a single offline HTML game about running a printing press through a two-day blackout. There is paper for two editions. What I print today should change tomorrow's letters and available stories. Show me the paper I have left. Build it and play through two different outcomes.
+
+**An original multiplayer world**
+
+> $build-game-world — Build both editions of a game about two glider pilots repairing a drifting observatory. One pilot can read air currents; the other can anchor a moving platform. In the first mission, either risk the short gap or repair the longer route. Ask me if a choice changes how cooperation feels. Build the mission, then connect two browsers and verify that both players see the same repair finish once.
+
+**Reproduce the full technical example**
+
+> $build-game-world — Rebuild Fault Line Echoes in a new directory using the pinned reference. Produce the offline HTML and the site with real room support. Test a branching quest, two characters, and create/join with two independent clients. Then show me where to build my own region.
+
+The skill includes a source-to-system map and a Python helper that retrieves the exact playable revision. The agent can use a local clone containing that revision or fetch it from GitHub. For a new game, reuse the engineering patterns and write a new story from the player's decisions. [Reference build instructions](.agents/skills/build-game-world/references/reference-build.md)
+
+### A place for character artists and VFX collaborators
+
+Detailed 3D character sculpting is outside my specialty, so I've left room here for professional artists to take the lead. You can still use the skill to integrate your work into a playable game. A collaborator can attach a folder or ZIP, point the agent to it and describe the change in a sentence.
+
+| Delivery | What to give the agent | What the agent checks in play |
 | --- | --- | --- |
-| 西门 | 青雨林 · 白石驿界碑 | 浅汊草滩、汇流镇、听瀑石庭。古根山口通往古根丛林 |
-| 东门 | 白盐旱漠 · 盐商古道 | 盐井、四风塔、望潮天门。断潮山口通往断潮峡谷 |
-| 北门 | 古根丛林 · 北林石关 | 古根庭、档案窟、千年冠廊 |
-| 南门 | 断潮峡谷 · 关南驿口 | 断潮关、绞盘、砂岩台地与谷底河流 |
+| Character or outfit | GLB or glTF with its textures, role/skin name, scale, facing, rig and clip names; add editable source and a pose reference if available. | First-person hands, third-person body, idle/move/cast transitions, skin switches and the other player's view. |
+| Accessory | Model, target joint/socket, offset or placement image, materials and credit. | Size, handedness, clipping and visibility in the intended poses. |
+| Skill effect | Sprite atlas, mesh animation or shader plus textures; action, cast/hit/block event, anchor, timing, blending and a short reference. | The effect follows the correct hand, projectile or surface. A miss and a confirmed block give different feedback, including remotely. |
 
-白砥城门距广场约 216 米，沿城墙可绕城一周，城外山岭构成远景。四境各有宽、深 1,240 米的可行走地形。地面、台阶、地下空间和上层平台使用 Rapier 碰撞。水岸采用实际碰撞地形的精度，河水沿纵坡前进、绕过礁石。在浅滩可以涉水，深处游泳时会被水流带向下游。白盐旱漠的盐湖为闭合静水，饮水可到聚落石井补给。
+> $build-game-world — My artist attached a courier GLB and a shield-spark atlas in `art-inbox/courier/`. Fit the coat to the courier's third-person rig. Show sparks at the contact point only on a confirmed block. Use the attached credit and license, verify an ordinary hit and a block, and give us an in-game comparison.
 
-从西门首次进入青雨林，按住 Tab 选择「浅汊渡口」可追踪附近的河岸。选「三叠跌水」则可沿河找到上游的落差。
+The included example pairs Gu Chao's actual wrist dial with a four-frame block-effect study. The preflight reads model nodes, named clips and referenced files. The agent then tests the result in the renderer. [Artist handoff guide](.agents/skills/build-game-world/references/art-handoff.md) · [Editable handoff manifest](.agents/skills/build-game-world/assets/handoff.example.json) · [Complete sample delivery](.agents/skills/build-game-world/assets/sample-delivery)
 
-## 任务手册与白砥汛报
+![Gu Chao’s wrist dial, the actual GLB included in the art handoff example](docs/images/phase-dial.webp)
 
-进城后按 T，可在「未接」「已接」「已完成」之间切换。选择引导后，箭头、距离和按住 Tab 的地图会指向委托人或下一道城门。白砥城的委托向本人领取，各镇的地方差事在委托牌前按 R 揭榜。可以同时接几单，再用手册切换当前路线。
+## Play Fault Line Echoes
 
-序章「未盖章的汛报」从白石议庭书记衡书处接取。去白砥泉井辨读泥线，再到警钟台试敲汛号，回议庭盖印。之后沿引导出西门，到青雨林观测台追查「第三声」。调查读错或敲错都可以当场重试。
+The game currently plays in Chinese. Click **进入主城 · 白砥城** to enter the capital plaza. You can explore freely, talk to residents or press **T** to find a commission. In this original campaign, a sluice rings a third time after a night of rain. The old register calls the downstream village empty. The people still drawing water there tell another story.
 
-## 雨后的药箱
+### The capital and four regions
 
-从白砥城广场按 T 打开任务手册，在未接任务中选「雨后的药箱」，开启引导。在白砥城与药师谢兰心交谈接下 4 L 的油布药箱，经西门去青雨林的浅汊渡口。红白水尺旁有两条路。沿石脊走是短路，循靛蓝布旗可上高岸木桥，途中可改道。深水会冲走没有系牢的药箱，沿下游寻找红系带，靠近按 R 打捞。东岸渡工任舟签收后给 8 行券，追回落水的药箱还能留下回水湾草图。衣坊可为背带打结。箱子在身上、地上或水里的状态会随存档保留。
+The marble capital holds a council hall, working forge, pharmacy, cloth shop, inn, spring and food stalls. Citizens move between places; a witness can call guards if you take someone else's goods. The four gates are about 216 metres from the plaza. Walk through the light curtain to reach the matching **boundary** of the next region. Each wild region spans roughly 1,240 metres across and offers surface, underground and elevated routes.
 
-## 玩法
+| West · Verdant Basin | East · The Salt Expanse | North · The Elder Weald | South · The Sundering |
+| --- | --- | --- | --- |
+| ![Forested river basin](public/atlas/rain.webp) | ![Dunes and salt flats](public/atlas/salt.webp) | ![Root and canopy settlement](public/atlas/root.webp) | ![Sandstone gorge](public/atlas/gorge.webp) |
+| Follow the river, ford and stepped falls. The woodland pass continues to the Elder Weald. | Visit the wells and wind tower. The salt-road pass continues to the gorge. | Climb canopy routes and descend into the root archive. | Choose elevated evacuation works or a low maintenance passage. |
 
-- 从叶岚、许砾、顾潮、陆衡中选择一人。行者空手出发，使用不同的位移、格挡、近战和远程技能。连击和格挡积蓄绝技回响。
-- 首页「行者」可查看角色身世和四个招式的图解。动作栏保留技能名，冷却显示秒数，绝技显示回响百分比。顾潮的「三拍」连续发出三次脉冲，许砾的「拨流」用琥珀色弧面提示招架，实际命中后才播放接触效果。
-- 石板、木桥、砂地、林地和涉水有不同的脚步声。野兽依据视野、遮挡和声音进行警戒。失去目标后，它们会搜索上一次发现你的位置，追出领地后退回。白砥城的居民走街、巡卫巡逻、店主离岗与返岗。目击偷窃的摊主会追击，附近听见呼喊的巡卫会赶来。通过居民对话领取的食物属于赠予。
-- 在鸣铁铸坊可以看孟砧锻打，在程记包子铺看面点师蒸包，在回春药铺找谢兰心买药。按 B 打开图标行囊，选中格子可查物品来源、体积与用途，点击操作可服用、穿戴或放下。行囊仍按实际升数结算。
-- 新行囊容量为 15 L。背负重量、饮食、运动、炎热和疾病影响旅途。城内可向程麦领包子、向梁刀生领肉、到井边装水。野外用水可带到炉火旁煮沸。到客栈或驿站床位可歇至夜间或黎明，首次巡夜火把可找白砥城守卫领取。
-- 主城序章「未盖章的汛报」衔接主线九章、十二条地方支线，另有三条隐秘分流线索和三个结局。常规调查目标有实物与标记，隐秘目标靠近后才显现。雨林可在低处排水或上栈桥系绳救人，两条路线会在场景里留下不同的结果。行囊、装束、剧情进度与待取材料自动保存在当前浏览器。
+### The travellers
 
-## 野外取材
+All four start unarmed. Six outfit designs fit each traveller. Cosmetics can travel into a duel; equipment bonuses belong to the solo campaign. Open **行者** on the title screen to inspect roles, skill icons and timing hints.
 
-四境中有十三种普通动物和八种昼夜首领。每日 06:00 至 18:00 为白昼。入夜后，四境分别出现青喉伏钟蛙、月帆沙蝰、银眼苔蛾、折耳崖蝠。可在客栈歇脚切换时段，按住 Tab 查看此时首领的地点和招式线索。每种动物提供对应部位。走近倒下的动物按 R，逐份取材。拿不下的部位留在原处，可以腾出容量后回来。打开行囊可查材料的来源、用途和收购行业。
+| Traveller | Background and fighting style | Q · E · C · V and passive |
+| --- | --- | --- |
+| <img src="src/avatar-portraits/leaf-0.webp" width="78" alt="Ye Lan"> **Ye Lan · 叶岚** | A rainforest flood courier who remembers a way down from every high route. Mobile close-range fighter. | 穿步 · 折返 · 余波掌 · 断线. Dash, retreat, project a palm wave, then rush in. A strike after a burst of movement gains extra resonance. |
+| <img src="src/avatar-portraits/stone-0.webp" width="78" alt="Xu Li"> **Xu Li · 许砾** | A former sluice mechanic who listens before entering a room. Close-range defender. | 沉肩 · 拨流 · 震台 · 合闸. Shoulder forward, time a parry, send a ground pulse, then land a heavy finisher. Blocking costs him less stamina. |
+| <img src="src/avatar-portraits/tide-0.webp" width="78" alt="Gu Chao"> **Gu Chao · 顾潮** | A basin acoustics recorder who follows the third signal with her wrist dial. Ranged pressure. | 直脉 · 折浪 · 退声 · 三拍. Aim a pulse, spread a volley, retreat while casting, or release three distinct shots. Distant hits build extra resonance. |
+| <img src="src/avatar-portraits/beam-0.webp" width="78" alt="Lu Heng"> **Lu Heng · 陆衡** | A bridge builder who reads the footings before crossing. Midrange lane control. | 扇潮 · 回折 · 锚步 · 槽涌. Fan a lane, focus a pulse, step in or launch a wide volley. Attack chains can deepen stagger. |
 
-从西门过境后，可在 Tab 地图里标记「浅汊草滩」。河滩野牛提供牛肉和厚皮。梁家肉铺或驿站炉火能把牛肉烤熟。两份厚皮和一份细麻布交给练家衣坊，可以缝出折叠驮袋，在行囊中使用后容量升至 28 L。白昼盐母的头胸甲和两枚大螯护片能在铁匠处制成盐母甲盔。武器、头护、身护、腿护和鞋子各占一个装备位。
+![Sixteen role-specific ability icons in Q, E, C and V order](docs/images/skill-icons.webp)
 
-## 操作
+Move around walls to break aim, use height to change sightlines, chain light and heavy attacks, guard from the front and spend accumulated resonance on an ultimate. Projectiles take time to travel and solid cover intercepts them. Cast, hit and block have separate feedback. [Sixteen first-person casts](docs/images/abilities.webp)
 
-| 操作 | 键位 |
+### Quests with physical evidence
+
+The handbook separates available, accepted and completed work. Select an offer for directions, find the giver and accept it in person. Town boards offer local jobs. Across maps, guidance points to the next gate. Several jobs can remain active while you follow one route.
+
+| The field handbook | Evidence in the capital |
 | --- | --- |
-| 移动、观察 | WASD、鼠标。方向键也可转动视角 |
-| 轻击、重击、格挡 | 鼠标左键、X、按住 F |
-| 技能、绝技 | Q / E / C、V |
-| 疾跑、静步、蹲下 | Shift、按住 Caps Lock 静步后松开恢复、按住 Ctrl 蹲下或轻按切换 |
-| 跳跃、攀爬 | 空格跳跃。面对够得着的树枝、石沿或绳梯，按住空格攀爬 |
-| 交谈、调查、取材 | R |
-| 白砥城四门往返、四境之间的山口 | 走入覆盖门洞的动态光幕，自动抵达另一侧关门 |
-| 地图、行囊、任务手册 | 按住 Tab 查看，松开返回；B、T |
-| 点燃或收起火把、行路菜单 | G、Esc |
+| ![Quest cards, rewards and guidance](docs/images/handbook.webp) | ![Marked flood gauge and warning bell](docs/images/evidence.webp) |
 
-[下一章玩法提案](public/next-chapter.html)收录送药任务的试玩指南，以及渡口水情、夜巡听兽、行商委托和双人渡索的后续设计与验收方式。
+**The Unsealed Flood Report** starts with clerk Heng Shu. Read the highest fresh mud mark beside the well, sound the warning bell from its inscription, then return for the seal. The prologue leads into nine chapters across the basin. Later you reconstruct a resident list, choose an evacuation route and decide where to divert water. Twelve regional side quests include three hidden clues; the campaign has three endings.
 
-## 本地运行与部署
+**The Medicine Chest After Rain** starts with apothecary Xie Lanxin at 回春药铺. Leave 4 L free and take the west gate. A short stone ford and a longer high-bank bridge reach the east-bank ferryman. Deep water can tear away an unsecured chest. Follow its red tie downstream and haul it out with **R**. The clothier can secure the strap. Delivery pays eight travel tokens and a keepsake that reflects the recovery.
 
-角色资产可以用 Blender 建模并导出 glTF 2.0 二进制文件（GLB）。顾潮六套装束的左腕都装有「潮汐听针」，可导入 Blender 编辑 [GLB 样件](src/avatar-models/phase-dial.glb)，也可用 [Python 源文件](scripts/model-phase-dial.py) 重建。浏览器用 Three.js 的 GLTFLoader 载入，单文件离线版包含同一份模型。
+![High-bank crossing above the medicine route](public/field-guide/upper-bridge.webp)
 
-使用 Node.js 22.12 或以上版本。
+### Life outside the walls
 
-```sh
-npm ci
-npm run dev
-```
+- **Movement and perception.** Walk, sprint, crouch, jump, swim and climb reachable holds. Stone, timber, sand, forest and water produce different footsteps. Holding quiet-walk suppresses footfall; an animal can still see you. Pursuers search the last known position and return when the chase exceeds their range.
+- **Survival.** Exertion, load, heat, food and water affect the expedition. Ask the baker for a bun, fill water at a town well or boil questionable river water at a fire. Rest at an inn until dawn or night. A city guard can help you get a first torch.
+- **Hunting and craft.** Thirteen common animals and eight day/night bosses occupy the four regions. Day runs from 06:00 to 18:00. Rest and check the map to find the current boss, habitat and clues. Take meat, hide, shell or another species-specific part. A river buffalo's meat can be cooked; two thick hides and fine linen make a 28 L pack. The smith can turn the salt boss's carapace and claw plates into a helmet.
+- **Inventory.** The starting pack has 15 L. Icons show what you carry; volume determines what fits. Examine provenance and uses, eat, equip, trade, craft or put an item down. Equipment slots cover weapon, head, body, legs and feet. Progress and quest objects are saved in the current browser.
 
-`npm test` 验证地形、战斗、居民警戒、取材交易和剧情分支。`npm run build` 在 `dist/` 生成站点和单文件离线版 `faultline-local.html`。双击这个 HTML 即可在支持 WebGL 2 的浏览器中玩单机，物理引擎、材质、天空、地图和许可证均已内嵌。网页版在设置中提供下载。`npm run preview` 可运行生产构建和本地房间接口。
+![The volume-based field pack, equipment and supply controls](docs/images/pack.webp)
 
-在 Vercel 导入仓库根目录即可。仓库里的 `vercel.json` 配置了 Vite、安装与构建命令、产物目录和信令服务的运行区域。部署时无需配置游戏服务器密钥。单机游玩所需资源随站点提供，物理引擎在进入世界时加载。
+### Two people in one room
 
-### 双人联机
+Open **联机**, choose duel or co-op patrol, create a room and give your friend the six-digit code or invite link. Invitations last three minutes; a paired session can last up to six hours while both pages stay open. Duels use baseline roles and are first to two wins. In patrol, one player reports a signal from the rain tower while the other confirms it at the old sluice within 18 seconds. Both receive the patrol badge; each keeps a private solo journal. [Open multiplayer](https://fault-line-echoes.vercel.app/?multiplayer=1)
 
-首页「联机」由房主选择活动，另一人输入六位房号。「切磋」使用空手角色的基础属性，双方装束可见。房主裁定命中、伤害与局分，比赛采用三局两胜制。「合作巡线」从白砥城出发，双方可在同一地区看见对方。一人在青雨林听雨楼报声，另一人在废闸于 18 秒内核验，两人各获得双岗巡线章。两端同步行者位置、昼夜与巡线结果，各自保存剧情、野怪与采集所得。
+The room starts on a same-origin HTTPS relay, upgrades to WebRTC when available and returns to relay if the direct path drops. The host adjudicates hits, scores and the joint signal. The Vercel deployment uses regional Runtime Cache; local development and preview use an in-memory implementation of the same protocol. A disconnected HTML file plays solo. Its network menu links to the hosted lobby and offers manual connection-code exchange for reachable peers.
 
-两人打开[正式站联机入口](https://fault-line-echoes.vercel.app/?multiplayer=1)。房主选活动，点击「创建房间」，把六位房号或邀请链接发给好友。好友点「加入房间」。三分钟是邀请的有效期，已经配对的会话最多持续六小时。双方保持游戏页面打开。
+![A first-person duel between clients in the running game](docs/images/duel.webp)
 
-房号首先接通同源 HTTPS 游戏消息中转，能建立 WebRTC 时自动切到直连。对战和巡线界面会显示当前通道，直连中断时回到中转。中转的更新间隔和两端到服务器的网络延迟会影响对战手感。房主继续裁定命中、比分与合作结果。Vercel 的区域 Runtime Cache 暂存配对和短期消息；本地开发与预览使用相同协议的内存实现。离线 HTML 的联机菜单提供正式站链接，也保留交换两段连接码的手动直连。
+### Controls
 
-## 项目结构
-
-| 文件 | 内容 |
+| Action | Input |
 | --- | --- |
-| `src/biomes.js`、`src/landscape*.js` | 独立地貌、水系、林相、岩层和实景地标 |
-| `src/capital*.js`、`src/settlement*.js`、`src/actors.js` | 白砥城、四境聚落、居民与分物种模型和动作 |
-| `src/borders.js`、`src/field-world.js`、`src/terrain-stream.js` | 界碑与道路、调查物件与现场分支、视野分块 |
-| `src/expedition*.js`、`src/perception*.js` | 行囊、补给、物种取材、工坊配方、视觉和听觉 |
-| `src/physics.js`、`src/combat.js`、`src/people.js` | Rapier 胶囊角色、移动与阻挡、自由瞄准、攻击和巡逻 |
-| `src/story.js`、`src/journal.js` | 剧情、支线、结局、解锁及存档 |
-| `src/view.js`、`src/sky.js`、`src/weather.js`、`src/audio.js` | Three.js 场景、实景天空、天气、环境声和第一人称视图 |
-| `src/room.js`、`src/patrol.js`、`api/rooms.js`、`server/signaling.js` | 房间、信令、双人切磋与合作巡线 |
+| Move and look | WASD and mouse; arrow keys can turn the camera |
+| Light / heavy / guard | Left click / X / hold F |
+| Skills / ultimate | Q, E, C / V |
+| Sprint / silent walk / crouch | Shift / hold Caps Lock / hold Ctrl or tap to toggle |
+| Jump / climb | Space / hold Space facing a reachable ledge, rope or tree hold |
+| Interact / travel | R / walk through a gate curtain |
+| Map / pack / quest handbook | Hold Tab and release to close / B / T |
+| Torch / menu | G / Esc |
 
-原创代码与程序美术使用 [MIT 许可证](LICENSE)。地表材质和天空全景来自 Poly Haven，采用 CC0。完整来源见[地表材质清单](public/terrain-materials/CREDITS.md)和[天空清单](public/sky/CREDITS.md)。生产构建会把依赖许可证写入 `dist/licenses/third-party.md`。
+## Run the project and trace its sources
+
+Use Node.js 22.12+ and npm. `npm ci` installs the locked dependencies. `npm run dev` starts development. `npm test` exercises the game rules, story branches, terrain, art contracts and room behaviour. `npm run build` produces the web edition and `dist/faultline-local.html`; `npm run preview` serves production output and the local room endpoint. On Vercel import the repository root and use the included configuration. For a double-click copy tracked in Git, save [the standalone game](play/faultline-local.html). Run `npm run snapshot:game` to refresh that tracked copy. To rebuild the portable skill guide after editing the skill, run `python scripts/package-world-skill.py`.
+
+| What you see | Where it comes from |
+| --- | --- |
+| Rendering, character meshes, animation and GLB loading | Three.js (MIT). Original procedural actors and rigs in `src/actors.js` and `src/avatar*.js`. The wrist dial is generated by [its Python source](scripts/model-phase-dial.py) and can be edited in Blender. |
+| Physical movement, terrain, water and town life | Rapier 3D (Apache-2.0) handles collisions. Terrain, channels, current, gates, jobs and perception are implemented in `src/biomes.js`, `src/water-*.js`, `src/capital*.js`, `src/settlement*.js` and `src/people.js`. |
+| Story, sound and role abilities | The world, characters, storyline and quest chains were created for this game. See `src/story.js`, `src/handbook.js`, `src/medicine.js`, `src/audio.js` and `src/combat.js`. |
+| Build and online service | Vite builds the browser client. Vercel Functions and the regional cache support the room API. The application implements transport and game authority in `src/room*.js`, `src/patrol.js`, `api/` and `server/`. |
+| External art | Poly Haven CC0 ground and bark textures and two CC0 sky panoramas. The source lists identify individual assets and modifications. The screenshots and portraits shown above are from this project. |
+
+Original code, programmatic art and skill are distributed under MIT. Production builds include dependency notices in `dist/licenses/third-party.md`; the single HTML embeds the notices. [Project license](LICENSE) · [Terrain credits](public/terrain-materials/CREDITS.md) · [Sky credits](public/sky/CREDITS.md) · [Three.js](https://threejs.org/) · [Rapier](https://rapier.rs/) · [Vite](https://vite.dev/)
+
+## Community
+
+[https://linux.do](https://linux.do)

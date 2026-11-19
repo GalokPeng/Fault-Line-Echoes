@@ -1,0 +1,26 @@
+{
+  "credit": "Fault Line Echoes contributors",
+  "license": "MIT; see the LICENSE distributed with this skill.",
+  "assets": [
+    {
+      "id": "tide-phase-dial",
+      "kind": "attachment",
+      "file": "phase-dial.glb",
+      "role": "tide",
+      "anchor": "left wrist",
+      "nodes": ["TidalSoundGauge"],
+      "notes": "Use the existing wrist transform as a socket. The dial is about 8.6 cm wide. Check the casting pose and all supported skins."
+    },
+    {
+      "id": "block-ring-study",
+      "kind": "vfx",
+      "file": "block-ring.svg",
+      "role": "tide",
+      "action": "guard",
+      "event": "block",
+      "anchor": "confirmed contact in world space",
+      "durationSeconds": 0.25,
+      "notes": "Integration study. Transparent 4 by 1 atlas with 64 px square cells. Read left to right at 16 fps. Face the camera; no damage is applied by this effect."
+    }
+  ]
+}

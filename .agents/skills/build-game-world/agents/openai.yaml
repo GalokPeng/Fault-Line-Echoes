@@ -1,0 +1,4 @@
+interface:
+  display_name: "Build a Game World"
+  short_description: "Turn gameplay ideas into original, playable browser worlds"
+  default_prompt: "Use $build-game-world to turn my gameplay idea into a world I can playtest."

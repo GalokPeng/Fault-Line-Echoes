@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#132621" />
+    <title>Build a Game World · Fault Line Echoes</title>
+    <link rel="icon" href="@@SIGIL@@" />
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: #f1efe6;
+        color: #192b26;
+        font:
+          16px/1.55 system-ui,
+          sans-serif;
+      }
+      button,
+      input,
+      textarea,
+      a {
+        font: inherit;
+      }
+      a {
+        color: #21664e;
+      }
+      button {
+        cursor: pointer;
+      }
+      .wrap {
+        max-width: 1030px;
+        margin: auto;
+        padding: 0 5vw;
+      }
+      .top {
+        background: #122721;
+        color: #faf5dc;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+      }
+      .brand img {
+        width: 29px;
+        height: 33px;
+      }
+      .top .wrap {
+        height: 60px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .top button {
+        color: #e5dbc2;
+        background: transparent;
+        border: 1px solid #718378;
+        border-radius: 3px;
+        font-size: 0.9rem;
+        padding: 4px 11px;
+      }
+      .hero {
+        color: #fff8de;
+        position: relative;
+        background: #253e36 url('@@COVER@@') center 52% / cover;
+      }
+      .hero:before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(92deg, #0a1d18f2, #132b21cb 49%, #112a1940);
+      }
+      .hero .wrap {
+        position: relative;
+        padding-top: 3rem;
+        padding-bottom: 3.6rem;
+      }
+      .hero h1 {
+        font:
+          normal clamp(2.6rem, 6vw, 5rem) / 1.05 Georgia,
+          'Songti SC',
+          serif;
+        letter-spacing: -0.04em;
+        margin: 0 0 0.8rem;
+        max-width: 48rem;
+      }
+      .hero p {
+        max-width: 38rem;
+        margin-bottom: 1.4rem;
+      }
+      .cta,
+      .copy {
+        display: inline-block;
+        border: 0;
+        border-radius: 3px;
+        background: #f3d99d;
+        color: #202c20;
+        text-decoration: none;
+        padding: 0.63rem 1rem;
+        font-weight: 650;
+      }
+      .hero a.play {
+        color: #fff5d0;
+        margin-left: 1.1rem;
+      }
+      .main {
+        display: grid;
+        grid-template-columns: minmax(0, 1.45fr) minmax(220px, 1fr);
+        gap: clamp(1.5rem, 5vw, 4rem);
+        padding-top: 2.5rem;
+        padding-bottom: 2.5rem;
+      }
+      .main h2 {
+        font:
+          normal 1.8rem/1.2 Georgia,
+          'Songti SC',
+          serif;
+        margin: 0 0 0.8rem;
+      }
+      .main p {
+        margin: 0.5rem 0 1rem;
+      }
+      .main section {
+        margin-bottom: 1.6rem;
+      }
+      fieldset {
+        border: 0;
+        padding: 0;
+        margin: 0;
+      }
+      legend,
+      label.caption {
+        display: block;
+        font-weight: 650;
+        margin-bottom: 0.5rem;
+      }
+      .choices {
+        display: flex;
+        gap: 0.4rem;
+        flex-wrap: wrap;
+      }
+      .choices label {
+        display: flex;
+        gap: 0.4rem;
+        align-items: center;
+        padding: 0.4rem 0.65rem;
+        border: 1px solid #9da99b;
+        border-radius: 3px;
+      }
+      .choices label:has(input:checked) {
+        background: #20483b;
+        color: #fff;
+      }
+      .choices input {
+        accent-color: #bd9e5a;
+      }
+      .tip {
+        min-height: 3rem;
+      }
+      textarea {
+        width: 100%;
+        resize: vertical;
+        padding: 0.6rem;
+        border: 1px solid #9da99b;
+        background: #fffdf4;
+        color: #1e3028;
+        border-radius: 3px;
+      }
+      pre {
+        border-left: 3px solid #ba985c;
+        background: #e4e7d9;
+        padding: 0.75rem 1rem;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        font:
+          0.94rem/1.55 ui-monospace,
+          monospace;
+      }
+      .copy {
+        background: #275541;
+        color: #fff;
+      }
+      .msg {
+        margin-left: 0.6rem;
+      }
+      .side {
+        border-left: 1px solid #c2ccbc;
+        padding-left: 1.5rem;
+      }
+      .side code {
+        overflow-wrap: anywhere;
+      }
+      footer {
+        border-top: 1px solid #c1caba;
+        padding: 1.5rem 0;
+      }
+      footer .wrap {
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+      }
+      body[data-lang='en'] .zh,
+      body[data-lang='zh'] .en {
+        display: none;
+      }
+      button:focus-visible,
+      a:focus-visible,
+      input:focus-visible,
+      textarea:focus-visible {
+        outline: 3px solid #b5822d;
+        outline-offset: 3px;
+      }
+      @media (max-width: 720px) {
+        .main {
+          display: block;
+        }
+        .side {
+          border: 0;
+          border-top: 1px solid #c2ccbc;
+          padding: 1.5rem 0 0;
+        }
+        .hero .wrap {
+          padding-top: 2.1rem;
+          padding-bottom: 2.3rem;
+        }
+      }
+    </style>
+  </head>
+  <body data-lang="en">
+    <header class="top">
+      <div class="wrap">
+        <strong class="brand"><img src="@@SIGIL@@" alt="" />Fault Line Echoes</strong
+        ><button id="language" lang="zh-CN">中文版</button>
+      </div>
+    </header>
+    <div class="hero">
+      <div class="wrap">
+        <h1><span class="en">Build a Game World</span><span class="zh">构建你想玩的世界</span></h1>
+        <p>
+          <span class="en"
+            >Bring a game idea. Let the agent build the rules, scenes and controls, then try the decision
+            you designed.</span
+          ><span class="zh"
+            >带来一个游戏点子，让 agent 做出规则、场景和操作，再亲手试试自己设计的选择。</span
+          >
+        </p>
+        <a class="cta" download="build-game-world.zip" href="data:application/zip;base64,@@ZIP@@"
+          ><span class="en">Download the skill</span><span class="zh">下载完整 skill</span></a
+        ><a href="https://fault-line-echoes.vercel.app/" class="play"
+          ><span class="en">Play Fault Line Echoes</span><span class="zh">在线试玩断层回声</span></a
+        >
+      </div>
+    </div>
+    <main class="main wrap">
+      <div>
+        <section>
+          <h2><span class="en">Start with the player</span><span class="zh">先从玩家出发</span></h2>
+          <fieldset>
+            <legend>
+              <span class="en">How will people open your game?</span
+              ><span class="zh">你希望玩家怎样打开游戏？</span>
+            </legend>
+            <div class="choices">
+              <label
+                ><input type="radio" name="target" value="file" checked /><span class="en"
+                  >One HTML file</span
+                ><span class="zh">单个 HTML</span></label
+              ><label
+                ><input type="radio" name="target" value="web" /><span class="en">Online link</span
+                ><span class="zh">在线网址</span></label
+              ><label
+                ><input type="radio" name="target" value="both" /><span class="en">Both editions</span
+                ><span class="zh">两种都要</span></label
+              >
+            </div>
+          </fieldset>
+          <p id="tip" class="tip" aria-live="polite"></p>
+          <label class="caption" for="idea"
+            ><span class="en">What decision should play revolve around?</span
+            ><span class="zh">你希望玩家做出什么有意思的选择？</span></label
+          ><textarea id="idea" rows="3"></textarea>
+        </section>
+        <section>
+          <h2>
+            <span class="en">Give this to your agent</span><span class="zh">把这段提示交给 agent</span>
+          </h2>
+          <pre id="prompt"></pre>
+          <button class="copy" id="copy">
+            <span class="en">Copy prompt</span><span class="zh">复制提示词</span></button
+          ><span class="msg" id="status" role="status"></span>
+        </section>
+      </div>
+      <aside class="side">
+        <section>
+          <h2><span class="en">Install in a project</span><span class="zh">安装到游戏项目</span></h2>
+          <div class="en">
+            <p>
+              Unzip the download and place the entire <code>build-game-world</code> folder inside
+              <code>.agents/skills/</code> in your new project. Open that project in a new Codex chat and
+              invoke <code>$build-game-world</code>.
+            </p>
+            <p>
+              The archive includes the instructions, art intake example, system guides and reference
+              build helper. You can extract it from this page while offline.
+            </p>
+          </div>
+          <div class="zh">
+            <p>
+              下载并解压，将整个 <code>build-game-world</code> 文件夹放进新项目的
+              <code>.agents/skills/</code>。用 Codex 在该项目新开对话，输入
+              <code>$build-game-world</code> 即可调用。
+            </p>
+            <p>压缩包内含 skill 说明、美术交付示例、技术指南和复现工具。断网打开本页也能提取。</p>
+          </div>
+        </section>
+        <section>
+          <h2><span class="en">Bring custom art</span><span class="zh">让专业美术加入</span></h2>
+          <p class="en">
+            Attach the character GLB or effect files, a pose or timing reference, the role and action to
+            replace, and the artist's credit and usage terms. The agent can map joints, animations and
+            effect events, integrate them, and return a playable comparison.
+          </p>
+          <p class="zh">
+            把角色 GLB 或特效文件、姿势图或时序参考、对应角色和招式、美术署名与授权交给
+            agent。它会检查文件，接骨骼、动作和特效事件，并交回能试玩的版本。
+          </p>
+        </section>
+        <section>
+          <h2><span class="en">Rebuild the example</span><span class="zh">完整复现示范游戏</span></h2>
+          <p class="en">
+            Ask the agent to use the included reference helper to build Fault Line Echoes in a fresh
+            folder and test both editions. Fetching the reference and its packages needs internet access
+            or local copies.
+          </p>
+          <p class="zh">
+            让 agent
+            用包内的复现工具，在新目录构建《断层回声》并测试两个版本。首次取得参考源码和依赖需要网络或本地副本。
+          </p>
+        </section>
+      </aside>
+    </main>
+    <footer>
+      <div class="wrap">
+        <a href="https://github.com/GalokPeng/Fault-Line-Echoes"
+          ><span class="en">Source &amp; player guide</span><span class="zh">源码与游玩指南</span></a
+        ><a href="https://linux.do">Linux DO</a>
+      </div>
+    </footer>
+    <script>
+      const $ = (id) => document.getElementById(id)
+      const text = {
+        en: {
+          idea: 'I run a night ferry. Each crossing can carry a passenger or a fresh-water barrel, and the tide changes the return route.',
+          targets: {
+            file: 'a self-contained offline HTML file',
+            web: 'a hosted game accessible by URL',
+            both: 'both a standalone offline solo game and a hosted edition',
+          },
+          tips: {
+            file: 'A player can double-click the file and play solo without a connection. Remote rooms need a reachable service.',
+            web: 'Players open a URL and receive updates on refresh. A solo game can use static hosting; shared rooms also need a service.',
+            both: 'Use one set of rules for the two builds. The file works offline; connected players can join rooms on the hosted edition if requested.',
+          },
+          lead: 'Use $build-game-world to build ',
+          end: ' Ask me about choices that change gameplay. Choose the technical details, implement the game and verify a playable build.',
+          copied: 'Copied.',
+          select: 'Prompt selected. Use your usual Copy command.',
+        },
+        zh: {
+          idea: '我经营一条夜渡船。每次只能载一位乘客或一桶淡水，涨潮会改变返航路线。',
+          targets: {
+            file: '一个可独立离线玩的单 HTML 游戏',
+            web: '一个通过网址访问的在线游戏',
+            both: '离线单机 HTML 和在线版两种交付',
+          },
+          tips: {
+            file: '玩家双击文件就能离线单机。异地房间需要双方都能访问的服务。',
+            web: '玩家点开网址即可游玩，刷新就能收到更新。单机只需静态托管，异地房间还需要后端。',
+            both: '同一套规则生成两个版本。HTML 断网时能玩单机，如需远程房间则接入在线版的服务。',
+          },
+          lead: '用 $build-game-world 制作',
+          end: '影响玩法取舍时请问我。技术由你决定，请实际开发并验证能玩的版本。',
+          copied: '已复制。',
+          select: '已选中提示词，请使用复制命令。',
+        },
+      }
+      let lang = location.hash === '#zh' ? 'zh' : 'en'
+      function draw(translate = false) {
+        const prior = lang === 'en' ? 'zh' : 'en',
+          t = text[lang],
+          idea = $('idea')
+        if (!idea.value || (translate && idea.value === text[prior].idea)) idea.value = t.idea
+        document.body.dataset.lang = lang
+        document.documentElement.lang = lang === 'en' ? 'en' : 'zh-CN'
+        $('language').textContent = lang === 'en' ? '中文版' : 'English'
+        $('language').lang = lang === 'en' ? 'zh-CN' : 'en'
+        const type = document.querySelector('[name=target]:checked').value
+        $('tip').textContent = t.tips[type]
+        $('prompt').textContent =
+          t.lead + t.targets[type] + (lang === 'en' ? '. ' : '。') + idea.value.trim() + t.end
+        $('status').textContent = ''
+      }
+      $('language').onclick = () => {
+        lang = lang === 'en' ? 'zh' : 'en'
+        draw(true)
+      }
+      document.querySelectorAll('[name=target]').forEach((el) => (el.onchange = () => draw()))
+      $('idea').oninput = () => {
+        const t = text[lang],
+          type = document.querySelector('[name=target]:checked').value
+        $('prompt').textContent =
+          t.lead + t.targets[type] + (lang === 'en' ? '. ' : '。') + $('idea').value.trim() + t.end
+        $('status').textContent = ''
+      }
+      function selectPrompt() {
+        const range = document.createRange()
+        range.selectNodeContents($('prompt'))
+        const selection = getSelection()
+        selection.removeAllRanges()
+        selection.addRange(range)
+        let copied = false
+        try {
+          copied = document.execCommand('copy')
+        } catch {}
+        $('status').textContent = text[lang][copied ? 'copied' : 'select']
+      }
+      $('copy').onclick = async () => {
+        if (location.protocol === 'file:' || !navigator.clipboard) {
+          selectPrompt()
+          return
+        }
+        try {
+          await navigator.clipboard.writeText($('prompt').textContent)
+          $('status').textContent = text[lang].copied
+        } catch {
+          selectPrompt()
+        }
+      }
+      draw()
+    </script>
+  </body>
+</html>
